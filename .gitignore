@@ -8,10 +8,14 @@ node_modules/
 out/
 dist/
 
-# Environment
+# Environment — nunca versionar arquivos com credenciais reais
 .env
 .env.local
 .env.*.local
+ingestao/.env
+ingestao/.env.example
+web/.env.local
+web/.env.local.example
 
 # Python
 __pycache__/

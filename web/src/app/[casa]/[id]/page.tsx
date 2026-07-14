@@ -1,15 +1,32 @@
 import { supabase } from "@/lib/db";
-import ListaProposicoes from "@/components/ListaProposicoes";
 import PainelAtuacao from "@/components/PainelAtuacao";
-import TabelaCotas from "@/components/TabelaCotas";
+import TabsDetalhe from "@/components/TabsDetalhe";
 import type { Despesa, Mandato, Parlamentar, Proposicao } from "@/types";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 export const revalidate = 3600;
 
+const LABELS: Record<string, string> = {
+  camara: "Câmara dos Deputados",
+  senado: "Senado Federal",
+};
+
 interface Props {
   params: Promise<{ casa: string; id: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { casa, id } = await params;
+  const { data } = await supabase
+    .from("parlamentar")
+    .select("nome")
+    .eq("casa", casa)
+    .eq("id_externo", Number(id))
+    .single();
+  return { title: data?.nome ?? "Parlamentar" };
 }
 
 export default async function DetalhePage({ params }: Props) {
@@ -43,63 +60,86 @@ export default async function DetalhePage({ params }: Props) {
     (acc: number, d: Despesa) => acc + (d.valor_liquido ?? 0),
     0
   );
+  const aprovadas = (proposicoes ?? []).filter((p: Proposicao) => p.aprovada).length;
+  const autorPrincipal = (proposicoes ?? []).filter((p: Proposicao) => p.autor_principal).length;
+
+  const corCasa = casa === "camara" ? "bg-blue-600" : "bg-emerald-700";
 
   return (
-    <main className="p-8 max-w-4xl mx-auto">
-      {/* Cabeçalho */}
-      <div className="flex gap-6 items-start mb-8">
-        {parlamentar.foto_url ? (
-          <Image
-            src={parlamentar.foto_url}
-            alt={parlamentar.nome}
-            width={120}
-            height={120}
-            className="rounded-full object-cover flex-shrink-0"
-          />
-        ) : (
-          <div className="w-[120px] h-[120px] rounded-full bg-gray-200 flex-shrink-0" />
-        )}
-        <div>
-          <h1 className="text-3xl font-bold">{parlamentar.nome}</h1>
-          {parlamentar.nome_civil && parlamentar.nome_civil !== parlamentar.nome && (
-            <p className="text-gray-500 text-sm mt-1">{parlamentar.nome_civil}</p>
+    <main className="max-w-5xl mx-auto px-6 py-8">
+      {/* Breadcrumb */}
+      <nav className="text-sm text-slate-400 mb-6 flex items-center gap-2">
+        <Link href="/" className="hover:text-slate-600">Início</Link>
+        <span>/</span>
+        <Link href={`/${casa}`} className="hover:text-slate-600">{LABELS[casa]}</Link>
+        <span>/</span>
+        <span className="text-slate-600 font-medium">{parlamentar.nome}</span>
+      </nav>
+
+      {/* Cabeçalho do parlamentar */}
+      <div className="card p-6 mb-6 flex gap-5 items-center">
+        <div className="flex-shrink-0 relative">
+          {parlamentar.foto_url ? (
+            <Image
+              src={parlamentar.foto_url}
+              alt={parlamentar.nome}
+              width={100}
+              height={100}
+              className="rounded-full object-cover ring-4 ring-slate-100"
+            />
+          ) : (
+            <div className="w-[100px] h-[100px] rounded-full bg-slate-200 flex items-center justify-center text-3xl font-bold text-slate-400">
+              {parlamentar.nome.charAt(0)}
+            </div>
           )}
-          <p className="text-gray-600 mt-2">
-            {parlamentar.partido} · {parlamentar.uf} ·{" "}
-            <span className="capitalize">{parlamentar.casa === "camara" ? "Câmara" : "Senado"}</span>
-          </p>
+          <span className={`absolute -bottom-1 -right-1 w-5 h-5 rounded-full ${corCasa} ring-2 ring-white`} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <h1 className="text-2xl font-bold text-slate-900 leading-tight">{parlamentar.nome}</h1>
+          {parlamentar.nome_civil && parlamentar.nome_civil !== parlamentar.nome && (
+            <p className="text-slate-500 text-sm mt-0.5">{parlamentar.nome_civil}</p>
+          )}
+          <div className="flex flex-wrap gap-2 mt-2">
+            {parlamentar.partido && (
+              <span className="badge badge-gray">{parlamentar.partido}</span>
+            )}
+            {parlamentar.uf && (
+              <span className="badge badge-gray">{parlamentar.uf}</span>
+            )}
+            <span className={`badge ${casa === "camara" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"}`}>
+              {LABELS[casa]}
+            </span>
+          </div>
           {(mandatos ?? []).map((m: Mandato) => (
-            <p key={m.id} className="text-xs text-gray-400 mt-1">
+            <p key={m.id} className="text-xs text-slate-400 mt-2">
               {m.legislatura}ª Legislatura
-              {m.data_inicio ? ` — desde ${new Date(m.data_inicio).toLocaleDateString("pt-BR")}` : ""}
+              {m.data_inicio
+                ? ` · desde ${new Date(m.data_inicio).toLocaleDateString("pt-BR")}`
+                : ""}
             </p>
           ))}
         </div>
       </div>
 
+      {/* Painel de stats */}
       <PainelAtuacao
         totalProposicoes={(proposicoes ?? []).length}
-        aprovadas={(proposicoes ?? []).filter((p: Proposicao) => p.aprovada).length}
+        aprovadas={aprovadas}
+        autorPrincipal={autorPrincipal}
         totalGasto={totalGasto}
+        totalDespesas={(despesas ?? []).length}
       />
 
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold mb-4">Projetos de lei</h2>
-        {proposicoes?.length ? (
-          <ListaProposicoes proposicoes={proposicoes} casa={parlamentar.casa} parlamentarId={parlamentar.id_externo} />
-        ) : (
-          <p className="text-gray-400 text-sm">Nenhuma proposição encontrada.</p>
-        )}
-      </section>
-
-      <section className="mt-10">
-        <h2 className="text-xl font-semibold mb-4">Cota parlamentar (CEAP)</h2>
-        {despesas?.length ? (
-          <TabelaCotas despesas={despesas} casa={parlamentar.casa} parlamentarId={parlamentar.id_externo} />
-        ) : (
-          <p className="text-gray-400 text-sm">Nenhuma despesa encontrada.</p>
-        )}
-      </section>
+      {/* Tabs — projetos e despesas */}
+      <div className="mt-6">
+        <TabsDetalhe
+          proposicoes={(proposicoes ?? []) as Proposicao[]}
+          despesas={(despesas ?? []) as Despesa[]}
+          casa={parlamentar.casa}
+          parlamentarId={parlamentar.id_externo}
+        />
+      </div>
     </main>
   );
 }

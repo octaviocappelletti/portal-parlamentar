@@ -1,8 +1,8 @@
 import { supabase } from "@/lib/db";
+import FiltroParlamentares from "@/components/FiltroParlamentares";
 import type { Parlamentar } from "@/types";
-import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import type { Metadata } from "next";
 
 export const revalidate = 86400;
 
@@ -13,6 +13,11 @@ const LABELS: Record<string, string> = {
 
 interface Props {
   params: Promise<{ casa: string }>;
+}
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { casa } = await params;
+  return { title: LABELS[casa] ?? "Parlamentares" };
 }
 
 export default async function ListaPage({ params }: Props) {
@@ -29,44 +34,30 @@ export default async function ListaPage({ params }: Props) {
 
   if (!parlamentares?.length) {
     return (
-      <main className="p-8">
+      <main className="max-w-7xl mx-auto px-6 py-12">
         <h1 className="text-2xl font-bold mb-4">{LABELS[casa]}</h1>
-        <p className="text-gray-500">
+        <p className="text-slate-500">
           Nenhum parlamentar encontrado. Execute a ingestão primeiro.
         </p>
       </main>
     );
   }
 
+  const ufs = [...new Set((parlamentares as Parlamentar[]).map((p) => p.uf).filter(Boolean))].sort() as string[];
+  const partidos = [...new Set((parlamentares as Parlamentar[]).map((p) => p.partido).filter(Boolean))].sort() as string[];
+
   return (
-    <main className="p-8">
-      <h1 className="text-2xl font-bold mb-6">{LABELS[casa]}</h1>
-      <p className="text-sm text-gray-400 mb-6">{parlamentares.length} parlamentares</p>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-        {parlamentares.map((p: Parlamentar) => (
-          <Link
-            key={p.id}
-            href={`/${casa}/${p.id_externo}`}
-            className="flex flex-col items-center p-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
-            {p.foto_url ? (
-              <Image
-                src={p.foto_url}
-                alt={p.nome}
-                width={72}
-                height={72}
-                className="rounded-full object-cover mb-2"
-              />
-            ) : (
-              <div className="w-[72px] h-[72px] rounded-full bg-gray-200 mb-2" />
-            )}
-            <span className="text-sm font-medium text-center leading-tight">{p.nome}</span>
-            <span className="text-xs text-gray-400 mt-1">
-              {p.partido} · {p.uf}
-            </span>
-          </Link>
-        ))}
+    <main className="max-w-7xl mx-auto px-6 py-8">
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-slate-900">{LABELS[casa]}</h1>
+        <p className="text-sm text-slate-400 mt-1">{parlamentares.length} parlamentares</p>
       </div>
+      <FiltroParlamentares
+        parlamentares={parlamentares as Parlamentar[]}
+        casa={casa}
+        ufs={ufs}
+        partidos={partidos}
+      />
     </main>
   );
 }

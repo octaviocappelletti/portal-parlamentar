@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Portal Parlamentar",
+  title: { default: "Portal Parlamentar", template: "%s · Portal Parlamentar" },
   description:
     "Acompanhe a atuação de senadores e deputados federais. Dados oficiais, sem login e sem rastreamento.",
 };
@@ -10,18 +11,39 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR">
-      <body className="bg-white text-gray-900 antialiased">
-        <header className="border-b px-6 py-3 flex items-center gap-4">
-          <a href="/" className="font-semibold text-lg">Portal Parlamentar</a>
-          <nav className="flex gap-4 text-sm text-gray-600">
-            <a href="/camara" className="hover:text-gray-900">Câmara</a>
-            <a href="/senado" className="hover:text-gray-900">Senado</a>
-          </nav>
+      <body className="min-h-screen flex flex-col">
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-30">
+          <div className="max-w-7xl mx-auto px-6 h-14 flex items-center gap-6">
+            <Link href="/" className="font-bold text-slate-900 text-lg tracking-tight">
+              Portal Parlamentar
+            </Link>
+            <nav className="flex items-center gap-1 ml-2">
+              <Link href="/camara" className="btn-ghost">Câmara</Link>
+              <Link href="/senado" className="btn-ghost">Senado</Link>
+            </nav>
+            <span className="ml-auto text-xs text-slate-400 hidden sm:block">
+              Dados oficiais · LAI 12.527/2011
+            </span>
+          </div>
         </header>
-        {children}
-        <footer className="border-t mt-16 px-6 py-4 text-xs text-gray-400 text-center">
-          Dados oficiais provenientes da API da Câmara dos Deputados e do Senado Federal (LAI 12.527/2011).
-          Sem rastreamento. Código aberto.
+
+        <div className="flex-1">{children}</div>
+
+        <footer className="border-t border-slate-200 bg-white mt-16">
+          <div className="max-w-7xl mx-auto px-6 py-5 text-xs text-slate-400 flex flex-wrap gap-4 justify-between">
+            <span>
+              Dados da{" "}
+              <a href="https://dadosabertos.camara.leg.br" target="_blank" rel="noopener noreferrer" className="underline">
+                API da Câmara
+              </a>{" "}
+              e do{" "}
+              <a href="https://legis.senado.leg.br/dadosabertos" target="_blank" rel="noopener noreferrer" className="underline">
+                Senado Federal
+              </a>
+              . Sem rastreamento. Código aberto.
+            </span>
+            <span>Portal somente-leitura</span>
+          </div>
         </footer>
       </body>
     </html>
