@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Next.js
+.next/
+out/
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Ingestão — cache bruto (não versionar respostas das APIs)
+ingestao/.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
