@@ -10,6 +10,7 @@ export interface Parlamentar {
   uf?: string;
   foto_url?: string;
   data_nascimento?: string;
+  situacao?: string;
 }
 
 export interface Mandato {

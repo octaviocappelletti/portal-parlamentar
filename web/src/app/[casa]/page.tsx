@@ -24,11 +24,9 @@ export default async function ListaPage({ params }: Props) {
   const { casa } = await params;
   if (!LABELS[casa]) notFound();
 
-  const { data: parlamentares, error } = await supabase
-    .from("parlamentar")
-    .select("*")
-    .eq("casa", casa)
-    .order("nome");
+  let query = supabase.from("parlamentar").select("*").eq("casa", casa);
+  if (casa === "camara") query = query.eq("situacao", "Exercício");
+  const { data: parlamentares, error } = await query.order("nome");
 
   if (error) throw error;
 

@@ -16,6 +16,7 @@ const LABELS: Record<string, string> = {
 
 interface Props {
   params: Promise<{ casa: string; id: string }>;
+  searchParams: Promise<{ aba?: string; filtro?: string }>;
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -29,8 +30,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   return { title: data?.nome ?? "Parlamentar" };
 }
 
-export default async function DetalhePage({ params }: Props) {
+export default async function DetalhePage({ params, searchParams }: Props) {
   const { casa, id } = await params;
+  const { aba: initialAba, filtro: initialFiltro } = await searchParams;
 
   const { data: parlamentar } = await supabase
     .from("parlamentar")
@@ -61,7 +63,10 @@ export default async function DetalhePage({ params }: Props) {
     0
   );
   const aprovadas = (proposicoes ?? []).filter((p: Proposicao) => p.aprovada).length;
-  const autorPrincipal = (proposicoes ?? []).filter((p: Proposicao) => p.autor_principal).length;
+  const primeiroAutor = (proposicoes ?? []).filter((p: Proposicao) => p.autor_principal).length;
+  const aprovadasPrimeiroAutor = (proposicoes ?? []).filter(
+    (p: Proposicao) => p.aprovada && p.autor_principal
+  ).length;
 
   const corCasa = casa === "camara" ? "bg-blue-600" : "bg-emerald-700";
 
@@ -124,9 +129,12 @@ export default async function DetalhePage({ params }: Props) {
 
       {/* Painel de stats */}
       <PainelAtuacao
+        casa={parlamentar.casa}
+        parlamentarId={parlamentar.id_externo}
         totalProposicoes={(proposicoes ?? []).length}
+        primeiroAutor={primeiroAutor}
         aprovadas={aprovadas}
-        autorPrincipal={autorPrincipal}
+        aprovadasPrimeiroAutor={aprovadasPrimeiroAutor}
         totalGasto={totalGasto}
         totalDespesas={(despesas ?? []).length}
       />
@@ -138,6 +146,8 @@ export default async function DetalhePage({ params }: Props) {
           despesas={(despesas ?? []) as Despesa[]}
           casa={parlamentar.casa}
           parlamentarId={parlamentar.id_externo}
+          initialAba={initialAba}
+          initialFiltro={initialFiltro}
         />
       </div>
     </main>

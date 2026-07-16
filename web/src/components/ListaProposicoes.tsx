@@ -3,9 +3,18 @@
 import type { Casa, Proposicao } from "@/types";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-const SITUACOES = ["Todas", "Aprovadas", "Em tramitação", "Arquivadas"] as const;
-type Filtro = (typeof SITUACOES)[number];
+type StatusFiltro = "Todas" | "Aprovadas" | "Em tramitação" | "Arquivadas";
+const STATUS_FILTROS: StatusFiltro[] = ["Todas", "Aprovadas", "Em tramitação", "Arquivadas"];
 
 const LABEL_SITUACAO: Record<string, string> = {
   aprovada: "Aprovada",
@@ -17,36 +26,126 @@ interface Props {
   proposicoes: Proposicao[];
   casa: Casa;
   parlamentarId: number;
+  initialFiltro?: string;
 }
 
-export default function ListaProposicoes({ proposicoes, casa, parlamentarId }: Props) {
-  const [filtro, setFiltro] = useState<Filtro>("Todas");
+function parseInitialFiltro(f?: string): { status: StatusFiltro; soAutor: boolean } {
+  switch (f) {
+    case "primeiro-autor":           return { status: "Todas",    soAutor: true  };
+    case "aprovadas":                return { status: "Aprovadas", soAutor: false };
+    case "aprovadas-primeiro-autor": return { status: "Aprovadas", soAutor: true  };
+    default:                         return { status: "Todas",    soAutor: false };
+  }
+}
+
+export default function ListaProposicoes({ proposicoes, casa, parlamentarId, initialFiltro }: Props) {
+  const init = parseInitialFiltro(initialFiltro);
+  const [status, setStatus] = useState<StatusFiltro>(init.status);
+  const [soAutor, setSoAutor] = useState(init.soAutor);
   const [busca, setBusca] = useState("");
-  const [soAutor, setSoAutor] = useState(false);
+  const [anoFiltro, setAnoFiltro] = useState<number | null>(null);
+
+  // Dados para o gráfico: total de proposições por ano
+  const dadosPorAno = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const p of proposicoes) {
+      if (p.ano) map.set(p.ano, (map.get(p.ano) ?? 0) + 1);
+    }
+    return [...map.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([ano, total]) => ({ ano, total }));
+  }, [proposicoes]);
 
   const filtradas = useMemo(() => {
     const termo = busca.toLowerCase().trim();
     return proposicoes.filter((p) => {
-      if (filtro === "Aprovadas" && !p.aprovada) return false;
-      if (filtro === "Em tramitação" && p.situacao !== "em tramitacao") return false;
-      if (filtro === "Arquivadas" && p.situacao !== "arquivada") return false;
-      if (soAutor && !p.autor_principal) return false;
-      if (termo && !(p.ementa ?? "").toLowerCase().includes(termo)) return false;
+      if (anoFiltro && p.ano !== anoFiltro)                                    return false;
+      if (status === "Aprovadas"     && !p.aprovada)                           return false;
+      if (status === "Em tramitação" && p.situacao !== "em tramitacao")        return false;
+      if (status === "Arquivadas"    && p.situacao !== "arquivada")            return false;
+      if (soAutor && !p.autor_principal)                                       return false;
+      if (termo && !(p.ementa ?? "").toLowerCase().includes(termo))            return false;
       return true;
     });
-  }, [proposicoes, filtro, busca, soAutor]);
+  }, [proposicoes, status, soAutor, busca, anoFiltro]);
+
+  const handleBarClick = (data: { ano: number }) => {
+    setAnoFiltro((prev) => (prev === data.ano ? null : data.ano));
+  };
 
   return (
     <div>
+      {/* Gráfico de colunas por ano */}
+      {dadosPorAno.length >= 2 && (
+        <div className="card p-4 mb-5">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+              Proposições por ano
+            </p>
+            {anoFiltro && (
+              <button
+                onClick={() => setAnoFiltro(null)}
+                className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+              >
+                Mostrando {anoFiltro} · limpar filtro ×
+              </button>
+            )}
+          </div>
+          <ResponsiveContainer width="100%" height={150}>
+            <BarChart data={dadosPorAno} barCategoryGap="35%" margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+              <XAxis
+                dataKey="ano"
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                allowDecimals={false}
+                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                axisLine={false}
+                tickLine={false}
+                width={28}
+              />
+              <Tooltip
+                cursor={{ fill: "#f1f5f9" }}
+                contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #e2e8f0" }}
+                formatter={(value: number) => [value, "proposições"]}
+                labelFormatter={(label) => `Ano ${label}`}
+              />
+              <Bar
+                dataKey="total"
+                radius={[3, 3, 0, 0]}
+                onClick={handleBarClick}
+                style={{ cursor: "pointer" }}
+              >
+                {dadosPorAno.map((entry) => (
+                  <Cell
+                    key={entry.ano}
+                    fill={
+                      anoFiltro === null
+                        ? "#3b82f6"
+                        : anoFiltro === entry.ano
+                        ? "#1d4ed8"
+                        : "#cbd5e1"
+                    }
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* Filtros */}
       <div className="flex flex-wrap gap-3 mb-4 items-center">
+        {/* Filtro de status */}
         <div className="flex gap-1 bg-slate-100 p-1 rounded-lg">
-          {SITUACOES.map((s) => (
+          {STATUS_FILTROS.map((s) => (
             <button
               key={s}
-              onClick={() => setFiltro(s)}
+              onClick={() => setStatus(s)}
               className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                filtro === s
+                status === s
                   ? "bg-white text-slate-900 shadow-sm"
                   : "text-slate-500 hover:text-slate-700"
               }`}
@@ -55,15 +154,21 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId }: P
             </button>
           ))}
         </div>
-        <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={soAutor}
-            onChange={(e) => setSoAutor(e.target.checked)}
-            className="rounded border-slate-300"
-          />
-          Só autor principal
-        </label>
+
+        {/* Toggle 1º autor — indisponível no Senado (todos os coautores são "Iniciadora") */}
+        {casa !== "senado" && (
+          <button
+            onClick={() => setSoAutor((v) => !v)}
+            className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
+              soAutor
+                ? "bg-blue-600 text-white border-blue-600"
+                : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            Somente 1º autor
+          </button>
+        )}
+
         <input
           type="search"
           placeholder="Buscar na ementa..."
@@ -71,7 +176,9 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId }: P
           onChange={(e) => setBusca(e.target.value)}
           className="input flex-1 min-w-[180px]"
         />
-        <span className="text-xs text-slate-400">{filtradas.length} resultado{filtradas.length !== 1 ? "s" : ""}</span>
+        <span className="text-xs text-slate-400">
+          {filtradas.length} resultado{filtradas.length !== 1 ? "s" : ""}
+        </span>
       </div>
 
       {/* Lista */}
@@ -95,18 +202,17 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId }: P
               </p>
               <div className="flex-shrink-0 flex flex-col items-end gap-1 ml-2">
                 {p.situacao && (
-                  <span className={`badge ${
-                    p.aprovada
-                      ? "badge-green"
-                      : p.situacao === "arquivada"
-                      ? "badge-gray"
-                      : "badge-yellow"
-                  }`}>
+                  <span
+                    className={`badge ${
+                      p.aprovada
+                        ? "badge-green"
+                        : p.situacao === "arquivada"
+                        ? "badge-gray"
+                        : "badge-yellow"
+                    }`}
+                  >
                     {LABEL_SITUACAO[p.situacao] ?? p.situacao}
                   </span>
-                )}
-                {p.autor_principal === false && (
-                  <span className="badge badge-purple">Coautor</span>
                 )}
               </div>
             </Link>

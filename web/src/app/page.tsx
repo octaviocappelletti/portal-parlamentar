@@ -12,7 +12,7 @@ async function fetchStats() {
     { count: totalProps },
     { data: gastoData },
   ] = await Promise.all([
-    supabase.from("parlamentar").select("*", { count: "exact", head: true }).eq("casa", "camara"),
+    supabase.from("parlamentar").select("*", { count: "exact", head: true }).eq("casa", "camara").eq("situacao", "Exercício"),
     supabase.from("parlamentar").select("*", { count: "exact", head: true }).eq("casa", "senado"),
     supabase.from("proposicao").select("*", { count: "exact", head: true }),
     supabase.from("despesa").select("valor_liquido"),

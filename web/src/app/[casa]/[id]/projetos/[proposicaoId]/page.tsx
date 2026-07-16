@@ -50,8 +50,8 @@ export default async function ProposicaoPage({ params }: Props) {
           </span>
         )}
         {proposicao.autor_principal === false && (
-          <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-600">
-            Coautor
+          <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-500">
+            Não é 1º autor
           </span>
         )}
       </div>

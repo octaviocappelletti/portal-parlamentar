@@ -10,12 +10,16 @@ interface Props {
   despesas: Despesa[];
   casa: Casa;
   parlamentarId: number;
+  initialAba?: string;
+  initialFiltro?: string;
 }
 
 const TABS = ["Projetos de lei", "Cota parlamentar (CEAP)"] as const;
 
-export default function TabsDetalhe({ proposicoes, despesas, casa, parlamentarId }: Props) {
-  const [aba, setAba] = useState<(typeof TABS)[number]>(TABS[0]);
+export default function TabsDetalhe({ proposicoes, despesas, casa, parlamentarId, initialAba, initialFiltro }: Props) {
+  const [aba, setAba] = useState<(typeof TABS)[number]>(
+    initialAba === "despesas" ? TABS[1] : TABS[0]
+  );
 
   return (
     <div>
@@ -41,6 +45,7 @@ export default function TabsDetalhe({ proposicoes, despesas, casa, parlamentarId
             proposicoes={proposicoes}
             casa={casa}
             parlamentarId={parlamentarId}
+            initialFiltro={initialFiltro}
           />
         ) : (
           <Vazio>Nenhuma proposição encontrada.</Vazio>

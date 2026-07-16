@@ -53,9 +53,10 @@ def fetch_deputados() -> list[dict]:
 
 
 def enrich_deputado(dep: dict) -> dict:
-    """Busca CPF e detalhes adicionais (§6.3)."""
+    """Busca CPF, situação e detalhes adicionais (§6.3)."""
     detail = get_json(f"{BASE}/deputados/{dep['id']}")
     d = detail.get("dados", {})
+    ultimo_status = d.get("ultimoStatus", {})
     return {
         "casa": "camara",
         "id_externo": dep["id"],
@@ -66,6 +67,7 @@ def enrich_deputado(dep: dict) -> dict:
         "foto_url": dep.get("urlFoto"),
         "cpf": d.get("cpf"),
         "data_nascimento": d.get("dataNascimento"),
+        "situacao": ultimo_status.get("situacao"),
     }
 
 
@@ -138,8 +140,12 @@ def main() -> None:
 
     with get_conn() as conn:
         for dep in deputados_raw:
-            print(f"  deputado {dep['id']} {dep.get('nome', '')}")
             enriched = enrich_deputado(dep)
+            situacao = enriched.get("situacao")
+            if situacao != "Exercício":
+                print(f"  IGNORADO {dep['id']} {dep.get('nome', '')} — situacao: {situacao}")
+                continue
+            print(f"  deputado {dep['id']} {dep.get('nome', '')}")
             parl_id = upsert_parlamentar(conn, enriched)
 
             # Mandato
