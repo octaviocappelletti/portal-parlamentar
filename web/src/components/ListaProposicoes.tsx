@@ -69,8 +69,9 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
     });
   }, [proposicoes, status, soAutor, busca, anoFiltro]);
 
-  const handleBarClick = (data: { ano: number }) => {
-    setAnoFiltro((prev) => (prev === data.ano ? null : data.ano));
+  const handleBarClick = (data: unknown) => {
+    const ano = (data as { ano: number }).ano;
+    setAnoFiltro((prev) => (prev === ano ? null : ano));
   };
 
   return (
@@ -109,7 +110,7 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
               <Tooltip
                 cursor={{ fill: "#f1f5f9" }}
                 contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #e2e8f0" }}
-                formatter={(value: number) => [value, "proposições"]}
+                formatter={(value) => [value, "proposições"]}
                 labelFormatter={(label) => `Ano ${label}`}
               />
               <Bar

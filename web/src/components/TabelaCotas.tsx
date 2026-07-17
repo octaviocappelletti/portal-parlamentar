@@ -208,7 +208,8 @@ export default function TabelaCotas({
             barCategoryGap="30%"
             margin={{ top: 2, right: 4, left: -16, bottom: 0 }}
             onClick={(e) => {
-              const payload = e?.activePayload?.[0]?.payload as { ano: number } | undefined;
+              const payload = (e as { activePayload?: { payload: { ano: number } }[] })
+                ?.activePayload?.[0]?.payload;
               if (payload) setAnoSel(payload.ano);
             }}
           >
@@ -221,7 +222,7 @@ export default function TabelaCotas({
             <Tooltip
               cursor={{ fill: "#f1f5f9" }}
               contentStyle={{ fontSize: 12, borderRadius: 6, border: "1px solid #e2e8f0" }}
-              formatter={(v: number) => [BRL0.format(v), "total"]}
+              formatter={(v) => [BRL0.format(Number(v)), "total"]}
               labelFormatter={(l) => `Ano ${l}`}
             />
             <Bar dataKey="total" radius={[3, 3, 0, 0]} style={{ cursor: "pointer" }}>
@@ -468,12 +469,25 @@ export default function TabelaCotas({
 
                                 {/* Fornecedor */}
                                 <td className="px-4 py-2.5 align-top">
-                                  <span
-                                    className="text-slate-700 block truncate max-w-[220px]"
-                                    title={d.fornecedor ?? ""}
-                                  >
-                                    {d.fornecedor ?? "—"}
-                                  </span>
+                                  {(() => {
+                                    const cnpj = (d.cpf_cnpj ?? "").replace(/\D/g, "");
+                                    return cnpj.length === 14 ? (
+                                      <Link
+                                        href={`/fornecedor/${cnpj}`}
+                                        className="text-slate-700 hover:text-blue-600 hover:underline block truncate max-w-[220px]"
+                                        title={d.fornecedor ?? ""}
+                                      >
+                                        {d.fornecedor ?? "—"}
+                                      </Link>
+                                    ) : (
+                                      <span
+                                        className="text-slate-700 block truncate max-w-[220px]"
+                                        title={d.fornecedor ?? ""}
+                                      >
+                                        {d.fornecedor ?? "—"}
+                                      </span>
+                                    );
+                                  })()}
                                 </td>
 
                                 {/* CNPJ/CPF */}

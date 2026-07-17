@@ -12,10 +12,14 @@ CREATE TABLE IF NOT EXISTS parlamentar (
   foto_url         TEXT,
   cpf              TEXT,
   data_nascimento  DATE,
+  situacao         TEXT,
   created_at       TIMESTAMPTZ  DEFAULT NOW(),
   updated_at       TIMESTAMPTZ  DEFAULT NOW(),
   UNIQUE (casa, id_externo)
 );
+
+-- Migração para bancos existentes
+ALTER TABLE parlamentar ADD COLUMN IF NOT EXISTS situacao TEXT;
 
 CREATE TABLE IF NOT EXISTS mandato (
   id              SERIAL PRIMARY KEY,
@@ -26,7 +30,8 @@ CREATE TABLE IF NOT EXISTS mandato (
   UNIQUE (parlamentar_id, legislatura)
 );
 
--- Chave de dedup: (casa, tipo, numero, ano) — §8
+-- Chave de dedup: (casa, tipo, numero, ano, parlamentar_id)
+-- Uma linha por (proposição × parlamentar) — permite coautorias corretamente.
 CREATE TABLE IF NOT EXISTS proposicao (
   id                 SERIAL PRIMARY KEY,
   parlamentar_id     INTEGER NOT NULL REFERENCES parlamentar(id) ON DELETE CASCADE,
@@ -41,8 +46,15 @@ CREATE TABLE IF NOT EXISTS proposicao (
   data_apresentacao  DATE,
   url_inteiro_teor   TEXT,
   fetched_at         TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE (casa, tipo, numero, ano)
+  UNIQUE (casa, tipo, numero, ano, parlamentar_id)
 );
+
+-- Migração para bancos existentes:
+-- a antiga constraint UNIQUE (casa, tipo, numero, ano) impedia co-autorias.
+-- Substituir pela constraint (casa, tipo, numero, ano, parlamentar_id).
+ALTER TABLE proposicao DROP CONSTRAINT IF EXISTS proposicao_casa_tipo_numero_ano_key;
+ALTER TABLE proposicao ADD CONSTRAINT IF NOT EXISTS proposicao_casa_tipo_numero_ano_parlamentar_id_key
+  UNIQUE (casa, tipo, numero, ano, parlamentar_id);
 
 -- Chave de dedup: (parlamentar_id, ano, mes, fornecedor, valor_liquido, documento) — §8
 CREATE TABLE IF NOT EXISTS despesa (
@@ -74,9 +86,77 @@ CREATE TABLE IF NOT EXISTS presenca (
   UNIQUE (parlamentar_id, ano, mes)
 );
 
+-- RLS — portal somente-leitura: libera SELECT para a chave anon do Supabase
+ALTER TABLE parlamentar ENABLE ROW LEVEL SECURITY;
+ALTER TABLE mandato     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE proposicao  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE despesa     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE presenca    ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "leitura publica" ON parlamentar FOR SELECT USING (true);
+CREATE POLICY "leitura publica" ON mandato     FOR SELECT USING (true);
+CREATE POLICY "leitura publica" ON proposicao  FOR SELECT USING (true);
+CREATE POLICY "leitura publica" ON despesa     FOR SELECT USING (true);
+CREATE POLICY "leitura publica" ON presenca    FOR SELECT USING (true);
+
 -- Índices para as queries mais comuns do front
-CREATE INDEX IF NOT EXISTS idx_parlamentar_casa       ON parlamentar(casa);
-CREATE INDEX IF NOT EXISTS idx_proposicao_parlamentar ON proposicao(parlamentar_id);
-CREATE INDEX IF NOT EXISTS idx_proposicao_aprovada    ON proposicao(aprovada);
-CREATE INDEX IF NOT EXISTS idx_despesa_parlamentar    ON despesa(parlamentar_id);
-CREATE INDEX IF NOT EXISTS idx_despesa_ano            ON despesa(ano);
+CREATE INDEX IF NOT EXISTS idx_parlamentar_casa         ON parlamentar(casa);
+CREATE INDEX IF NOT EXISTS idx_parlamentar_situacao     ON parlamentar(casa, situacao);
+CREATE INDEX IF NOT EXISTS idx_proposicao_parlamentar   ON proposicao(parlamentar_id);
+CREATE INDEX IF NOT EXISTS idx_proposicao_aprovada      ON proposicao(aprovada);
+CREATE INDEX IF NOT EXISTS idx_despesa_parlamentar      ON despesa(parlamentar_id);
+CREATE INDEX IF NOT EXISTS idx_despesa_ano              ON despesa(ano);
+-- Índice composto essencial para o check "ano já ingerido?" e para lazy-load por ano
+CREATE INDEX IF NOT EXISTS idx_despesa_parlamentar_ano  ON despesa(parlamentar_id, ano);
+CREATE INDEX IF NOT EXISTS idx_despesa_cpf_cnpj         ON despesa(cpf_cnpj);
+-- Coluna gerada que normaliza cpf_cnpj para dígitos puros (resolve diferença de formato
+-- entre a API da Câmara, que retorna dígitos, e a do Senado, que retorna com pontuação).
+ALTER TABLE despesa ADD COLUMN IF NOT EXISTS cnpj_normalizado TEXT
+  GENERATED ALWAYS AS (regexp_replace(cpf_cnpj, '[^0-9]', '', 'g')) STORED;
+CREATE INDEX IF NOT EXISTS idx_despesa_cnpj_normalizado ON despesa(cnpj_normalizado);
+
+-- ── Views expostas via PostgREST ─────────────────────────────────────────────
+
+-- Total geral de despesas (1 linha) — substitui o select("valor_liquido") da home
+CREATE OR REPLACE VIEW despesa_totais AS
+SELECT COALESCE(SUM(valor_liquido)::FLOAT8, 0) AS total_geral FROM despesa;
+
+GRANT SELECT ON despesa_totais TO anon, authenticated;
+
+-- Resumo por parlamentar × ano — alimenta a timeline de anos sem carregar N mil linhas
+CREATE OR REPLACE VIEW despesa_resumo_ano AS
+SELECT
+  parlamentar_id,
+  ano,
+  COALESCE(SUM(valor_liquido)::FLOAT8, 0) AS total,
+  COUNT(*)::INT                            AS lancamentos
+FROM despesa
+GROUP BY parlamentar_id, ano;
+
+GRANT SELECT ON despesa_resumo_ano TO anon, authenticated;
+
+-- ── Fornecedores (dados da Receita Federal — populados pela Fase 2 da ingestão) ─
+
+CREATE TABLE IF NOT EXISTS fornecedor (
+  id                       SERIAL PRIMARY KEY,
+  cnpj                     CHAR(14)  NOT NULL UNIQUE,
+  razao_social             TEXT,
+  nome_fantasia            TEXT,
+  situacao_cadastral       CHAR(2),
+  data_situacao_cadastral  DATE,
+  data_inicio_atividade    DATE,
+  cnae_principal           TEXT,
+  porte_empresa            CHAR(2),
+  capital_social           TEXT,
+  logradouro               TEXT,
+  numero                   TEXT,
+  bairro                   TEXT,
+  municipio                TEXT,
+  uf                       CHAR(2),
+  cep                      CHAR(8),
+  enriched_at              TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE fornecedor ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "leitura publica" ON fornecedor FOR SELECT USING (true);
+GRANT SELECT ON fornecedor TO anon, authenticated;

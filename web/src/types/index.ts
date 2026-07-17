@@ -51,6 +51,25 @@ export interface Despesa {
   documento?: string;
 }
 
+export interface Fornecedor {
+  id: number;
+  cnpj: string;
+  razao_social?: string;
+  nome_fantasia?: string;
+  situacao_cadastral?: string;
+  data_situacao_cadastral?: string;
+  data_inicio_atividade?: string;
+  cnae_principal?: string;
+  porte_empresa?: string;
+  capital_social?: string;
+  logradouro?: string;
+  numero?: string;
+  bairro?: string;
+  municipio?: string;
+  uf?: string;
+  cep?: string;
+}
+
 /** Linha da view despesa_resumo_ano — carregada em SSR para montar a timeline. */
 export interface DespesaResumoAno {
   parlamentar_id: number;
