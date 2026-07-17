@@ -1,5 +1,6 @@
 """Upserts idempotentes no Postgres — §7 (Idempotência)."""
 
+import json
 import os
 
 import psycopg
@@ -73,6 +74,84 @@ def upsert_proposicao(conn: psycopg.Connection, p: dict) -> None:
             """,
             p,
         )
+
+
+def upsert_fornecedor(conn: psycopg.Connection, f: dict) -> None:
+    cnae_sec = f.get("cnae_secundarios")
+    params = {
+        **f,
+        "cnae_secundarios": json.dumps(cnae_sec, ensure_ascii=False) if cnae_sec else None,
+    }
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO fornecedor (
+              cnpj, razao_social, nome_fantasia,
+              situacao_cadastral, data_situacao_cadastral, motivo_situacao_cadastral,
+              data_inicio_atividade,
+              cnae_principal, cnae_principal_descricao, cnae_secundarios,
+              natureza_juridica_codigo, natureza_juridica_descricao,
+              porte_empresa, capital_social, opcao_simples, opcao_mei,
+              logradouro, numero, bairro, municipio, uf, cep,
+              enriched_at
+            )
+            VALUES (
+              %(cnpj)s, %(razao_social)s, %(nome_fantasia)s,
+              %(situacao_cadastral)s, %(data_situacao_cadastral)s, %(motivo_situacao_cadastral)s,
+              %(data_inicio_atividade)s,
+              %(cnae_principal)s, %(cnae_principal_descricao)s, %(cnae_secundarios)s,
+              %(natureza_juridica_codigo)s, %(natureza_juridica_descricao)s,
+              %(porte_empresa)s, %(capital_social)s, %(opcao_simples)s, %(opcao_mei)s,
+              %(logradouro)s, %(numero)s, %(bairro)s, %(municipio)s, %(uf)s, %(cep)s,
+              NOW()
+            )
+            ON CONFLICT (cnpj) DO UPDATE SET
+              razao_social                = EXCLUDED.razao_social,
+              nome_fantasia               = EXCLUDED.nome_fantasia,
+              situacao_cadastral          = EXCLUDED.situacao_cadastral,
+              data_situacao_cadastral     = EXCLUDED.data_situacao_cadastral,
+              motivo_situacao_cadastral   = EXCLUDED.motivo_situacao_cadastral,
+              data_inicio_atividade       = EXCLUDED.data_inicio_atividade,
+              cnae_principal              = EXCLUDED.cnae_principal,
+              cnae_principal_descricao    = EXCLUDED.cnae_principal_descricao,
+              cnae_secundarios            = EXCLUDED.cnae_secundarios,
+              natureza_juridica_codigo    = EXCLUDED.natureza_juridica_codigo,
+              natureza_juridica_descricao = EXCLUDED.natureza_juridica_descricao,
+              porte_empresa               = EXCLUDED.porte_empresa,
+              capital_social              = EXCLUDED.capital_social,
+              opcao_simples               = EXCLUDED.opcao_simples,
+              opcao_mei                   = EXCLUDED.opcao_mei,
+              logradouro                  = EXCLUDED.logradouro,
+              numero                      = EXCLUDED.numero,
+              bairro                      = EXCLUDED.bairro,
+              municipio                   = EXCLUDED.municipio,
+              uf                          = EXCLUDED.uf,
+              cep                         = EXCLUDED.cep,
+              enriched_at                 = NOW()
+            """,
+            params,
+        )
+
+
+def replace_fornecedor_socios(conn: psycopg.Connection, cnpj: str, socios: list[dict]) -> None:
+    """Remove sócios anteriores e reinsere a lista atual (idempotente)."""
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM fornecedor_socio WHERE fornecedor_cnpj = %s", (cnpj,))
+        for s in socios:
+            cur.execute(
+                """
+                INSERT INTO fornecedor_socio (
+                  fornecedor_cnpj, nome, identificador_socio,
+                  qualificacao_codigo, qualificacao_descricao,
+                  data_entrada_sociedade, faixa_etaria, cpf_representante_legal
+                ) VALUES (
+                  %(fornecedor_cnpj)s, %(nome)s, %(identificador_socio)s,
+                  %(qualificacao_codigo)s, %(qualificacao_descricao)s,
+                  %(data_entrada_sociedade)s, %(faixa_etaria)s, %(cpf_representante_legal)s
+                )
+                """,
+                s,
+            )
 
 
 def upsert_despesa(conn: psycopg.Connection, d: dict) -> None:

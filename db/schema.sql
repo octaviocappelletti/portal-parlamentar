@@ -138,25 +138,60 @@ GRANT SELECT ON despesa_resumo_ano TO anon, authenticated;
 -- ── Fornecedores (dados da Receita Federal — populados pela Fase 2 da ingestão) ─
 
 CREATE TABLE IF NOT EXISTS fornecedor (
-  id                       SERIAL PRIMARY KEY,
-  cnpj                     CHAR(14)  NOT NULL UNIQUE,
-  razao_social             TEXT,
-  nome_fantasia            TEXT,
-  situacao_cadastral       CHAR(2),
-  data_situacao_cadastral  DATE,
-  data_inicio_atividade    DATE,
-  cnae_principal           TEXT,
-  porte_empresa            CHAR(2),
-  capital_social           TEXT,
-  logradouro               TEXT,
-  numero                   TEXT,
-  bairro                   TEXT,
-  municipio                TEXT,
-  uf                       CHAR(2),
-  cep                      CHAR(8),
-  enriched_at              TIMESTAMPTZ DEFAULT NOW()
+  id                          SERIAL PRIMARY KEY,
+  cnpj                        CHAR(14)  NOT NULL UNIQUE,
+  razao_social                TEXT,
+  nome_fantasia               TEXT,
+  situacao_cadastral          CHAR(2),
+  data_situacao_cadastral     DATE,
+  motivo_situacao_cadastral   TEXT,
+  data_inicio_atividade       DATE,
+  cnae_principal              TEXT,
+  cnae_principal_descricao    TEXT,
+  cnae_secundarios            JSONB,    -- [{codigo, descricao}]
+  natureza_juridica_codigo    CHAR(4),
+  natureza_juridica_descricao TEXT,
+  porte_empresa               CHAR(2),
+  capital_social              TEXT,
+  opcao_simples               BOOLEAN,
+  opcao_mei                   BOOLEAN,
+  logradouro                  TEXT,
+  numero                      TEXT,
+  bairro                      TEXT,
+  municipio                   TEXT,
+  uf                          CHAR(2),
+  cep                         CHAR(8),
+  enriched_at                 TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Migrações para bancos existentes
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS motivo_situacao_cadastral   TEXT;
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS cnae_principal_descricao    TEXT;
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS cnae_secundarios            JSONB;
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS natureza_juridica_codigo    CHAR(4);
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS natureza_juridica_descricao TEXT;
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS opcao_simples               BOOLEAN;
+ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS opcao_mei                   BOOLEAN;
 
 ALTER TABLE fornecedor ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "leitura publica" ON fornecedor FOR SELECT USING (true);
 GRANT SELECT ON fornecedor TO anon, authenticated;
+
+-- Quadro societário dos fornecedores
+CREATE TABLE IF NOT EXISTS fornecedor_socio (
+  id                       SERIAL PRIMARY KEY,
+  fornecedor_cnpj          CHAR(14) NOT NULL REFERENCES fornecedor(cnpj) ON DELETE CASCADE,
+  nome                     TEXT,
+  identificador_socio      CHAR(1),  -- '1'=PJ  '2'=PF  '3'=Estrangeiro
+  qualificacao_codigo      CHAR(2),
+  qualificacao_descricao   TEXT,
+  data_entrada_sociedade   DATE,
+  faixa_etaria             CHAR(1),
+  cpf_representante_legal  TEXT      -- já mascarado na fonte (LGPD)
+);
+
+ALTER TABLE fornecedor_socio ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "leitura publica" ON fornecedor_socio FOR SELECT USING (true);
+GRANT SELECT ON fornecedor_socio TO anon, authenticated;
+
+CREATE INDEX IF NOT EXISTS idx_fornecedor_socio_cnpj ON fornecedor_socio(fornecedor_cnpj);

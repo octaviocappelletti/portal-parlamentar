@@ -50,9 +50,9 @@ Componente client (`"use client"`) extraído da página para habilitar o estado 
 
 O nome do fornecedor na tabela de despesas do parlamentar vira `<Link>` condicionalmente: apenas quando `cpf_cnpj` resolve para 14 dígitos (CNPJ). CPF (11 dígitos) e campos vazios continuam como `<span>`.
 
-### Fase 2 — Enriquecimento com Receita Federal (pendente)
+### Fase 2 — Enriquecimento com Receita Federal (concluída)
 
-A tabela `fornecedor` foi criada no schema e está preparada para receber dados da Receita Federal (razão social oficial, situação cadastral, CNAE, porte, endereço). Quando populada, os badges aparecem automaticamente no header da página sem nenhuma mudança de código adicional. O script de ingestão (`ingestao/scripts/ingestao_fornecedores.py`) é o próximo passo.
+A tabela `fornecedor` foi populada com dados da Receita Federal via o script `ingestao/scripts/ingestao_fornecedores.py`. Ver seção "Fase 2" abaixo para detalhes completos.
 
 ---
 
@@ -100,15 +100,24 @@ if (!despesasRaw?.length) notFound();                  // → 404 apenas se real
 
 **Solução planejada para a Fase 2:** abordagem de *reverse lookup* — extrair os CNPJs únicos presentes na tabela `despesa` (no máximo algumas dezenas de milhares) e, ao varrer os arquivos da Receita, gravar apenas as linhas que batem. O resultado final na tabela `fornecedor` caberá em poucos MB.
 
-### 4. URL de download dos arquivos da Receita Federal não confirmada
+### 4. URL de download dos arquivos da Receita Federal — padrão errado
 
-**Problema:** o portal da Receita usa Nextcloud com downloads acionados via JavaScript, impedindo capturar a URL exata de cada arquivo.
+**Problema:** a URL documentada no padrão Nextcloud `/index.php/s/{token}/download?path=...&files=...` retornava HTTP 200 com body vazio (0 bytes), gerando um arquivo zip inválido e `zipfile.BadZipFile` na abertura. O padrão `?path=%2F2026-07` resultava em 200+vazio; `?path=%2F2026%2F07` resultava em 404.
 
-**Solução planejada para a Fase 2:** o script de ingestão deve fazer `requests.head()` no padrão suspeito antes de rodar em lote:
+**Diagnóstico:** ao inspecionar o conteúdo do arquivo baixado (`b''`) e testar variações de URL, ficou claro que o endpoint `/download?path=&files=` não está funcional neste share. A solução foi usar a API WebDAV nativa do Nextcloud, que é o protocolo correto para acesso programático a shares públicos.
+
+**Solução:** autenticação Basic com o token do share como usuário e senha vazia, via endpoint `/public.php/webdav/`:
+
+```python
+import base64
+RF_TOKEN = "YggdBLfdninEJX9"
+RF_AUTH  = base64.b64encode(f"{RF_TOKEN}:".encode()).decode()
+
+url = f"https://arquivos.receitafederal.gov.br/public.php/webdav/{RF_MES}/{arquivo}.zip"
+headers = {"Authorization": f"Basic {RF_AUTH}"}
 ```
-https://arquivos.receitafederal.gov.br/index.php/s/YggdBLfdninEJX9/download?path=%2F2026-07&files=Empresas0.zip
-```
-Se o HEAD retornar 200 com `Content-Type: application/zip`, o padrão está correto.
+
+A listagem do share via `PROPFIND` com `Depth: 1` confirmou a estrutura de pastas por mês (`2023-05/` a `2026-07/`) e os nomes exatos dos arquivos antes de iniciar os downloads.
 
 ### 5. Erros de tipagem pré-existentes bloqueando o build
 
@@ -137,7 +146,101 @@ const handleBarClick = (data: unknown) => {
 
 ---
 
-## Decisões de arquitetura
+## Fase 2 — Enriquecimento com Receita Federal
+
+### Visão geral
+
+Implementação completa do enriquecimento de fornecedores com dados abertos da Receita Federal do Brasil. O pipeline faz *reverse lookup*: em vez de ingerir os ~60 milhões de CNPJs do dataset completo, extrai apenas os CNPJs presentes em `despesa.cnpj_normalizado` (~46 mil) e filtra os arquivos da RF em busca deles.
+
+**Resultado da primeira execução (julho 2026):**
+- 45.980 fornecedores gravados na tabela `fornecedor`
+- 96.537 sócios gravados na tabela `fornecedor_socio`
+- 6 CNPJs não encontrados na RF (inválidos ou removidos do cadastro — ignorados)
+
+### Arquivos criados ou modificados
+
+| Arquivo | Tipo | O que mudou |
+|---|---|---|
+| `db/schema.sql` | modificado | 7 novas colunas em `fornecedor` + tabela `fornecedor_socio` com RLS, grant e índice |
+| `web/src/types/index.ts` | modificado | `Fornecedor` ampliado; `FornecedorSocio` e `CnaeItem` adicionados |
+| `web/src/app/fornecedor/[cnpj]/page.tsx` | reescrito | Seções novas: Situação, Classificação, Endereço, CNAEs, Quadro societário |
+| `ingestao/lib/db.py` | modificado | `upsert_fornecedor` e `replace_fornecedor_socios` adicionados |
+| `ingestao/scripts/ingestao_fornecedores.py` | criado | Script de ingestão da Receita Federal |
+
+### Novas colunas em `fornecedor`
+
+```sql
+motivo_situacao_cadastral   TEXT     -- ex: "Omissão de declarações"
+cnae_principal_descricao    TEXT     -- ex: "Desenvolvimento de programas de computador"
+cnae_secundarios            JSONB    -- [{codigo, descricao}, ...]
+natureza_juridica_codigo    CHAR(4)  -- ex: "2062"
+natureza_juridica_descricao TEXT     -- ex: "Sociedade Empresária Limitada"
+opcao_simples               BOOLEAN  -- regime Simples Nacional
+opcao_mei                   BOOLEAN  -- MEI (subconjunto do Simples)
+```
+
+### Nova tabela `fornecedor_socio`
+
+```sql
+CREATE TABLE fornecedor_socio (
+  id                       SERIAL PRIMARY KEY,
+  fornecedor_cnpj          CHAR(14) REFERENCES fornecedor(cnpj) ON DELETE CASCADE,
+  nome                     TEXT,
+  identificador_socio      CHAR(1),  -- '1'=PJ '2'=PF '3'=Estrangeiro
+  qualificacao_codigo      CHAR(2),
+  qualificacao_descricao   TEXT,
+  data_entrada_sociedade   DATE,
+  faixa_etaria             CHAR(1),
+  cpf_representante_legal  TEXT      -- mascarado na fonte (LGPD)
+);
+```
+
+A idempotência é garantida por `DELETE WHERE fornecedor_cnpj = %s` antes de cada re-inserção, já que não há chave única natural confiável nos dados da RF.
+
+### Estrutura do script de ingestão
+
+O script processa os arquivos na seguinte ordem, usando cache em disco para evitar re-downloads:
+
+```
+[1] CNPJs alvo       → SELECT DISTINCT cnpj_normalizado FROM despesa
+[2] Domínios         → Cnaes · Naturezas · Qualificacoes · Motivos · Municipios (em memória)
+[3] Estabelecimentos → endereço, CNAE, situação cadastral (filtra por CNPJ completo 14d)
+[4] Empresas         → razão social, natureza jurídica, capital, porte (filtra por cnpj_basico 8d)
+[5] Simples          → opcao_simples / opcao_mei (filtra por cnpj_basico)
+[6] Socios           → quadro societário (filtra por cnpj_basico)
+    COMMIT único
+```
+
+Cache: `.cache/receita_federal/{RF_MES}_{arquivo}.zip`. Re-execução não re-baixa nada.
+
+### Layout dos arquivos CSV da Receita Federal
+
+Encoding Latin-1, separador `;`, sem header, campos texto entre aspas.
+
+| Arquivo | Colunas relevantes (índice 0-based) |
+|---|---|
+| Estabelecimentos | 0-2: cnpj_basico+ordem+dv · 4: nome_fantasia · 5-7: situação+data+motivo · 10-12: data_inicio+cnae_princ+cnae_sec · 13-20: endereço |
+| Empresas | 0: cnpj_basico · 1: razao_social · 2: nat_juridica · 4: capital · 5: porte |
+| Socios | 0: cnpj_basico · 1: id_socio · 2: nome · 3: cpf_cnpj · 4: qualificacao · 5: data_entrada · 10: faixa_etaria |
+| Simples | 0: cnpj_basico · 1: opcao_simples (S/N) · 4: opcao_mei (S/N) |
+| Domínios | 0: codigo · 1: descricao |
+
+### Novos campos exibidos na página do fornecedor
+
+| Seção | Fonte |
+|---|---|
+| Header: badges de Natureza jurídica e Simples/MEI | `fornecedor` |
+| Situação: data + motivo + idade da empresa + capital social | `fornecedor` |
+| Classificação: natureza jurídica, porte, regime tributário | `fornecedor` |
+| Endereço: logradouro, bairro, município/UF, CEP formatado | `fornecedor` |
+| Atividades (CNAE): principal com descrição + secundárias | `fornecedor` |
+| Quadro societário: nome, tipo, qualificação, data de entrada, faixa etária | `fornecedor_socio` |
+
+A query à `fornecedor_socio` tem fallback silencioso (`errSocios ? [] : socios`) — se a tabela não existir no banco, a seção simplesmente não aparece.
+
+---
+
+## Dificuldades encontradas e soluções adotadas (Fase 2)
 
 ### Server component + client component separados
 
@@ -151,11 +254,38 @@ O CNPJ (14 dígitos numéricos) foi escolhido como parâmetro de rota porque é 
 
 A query à tabela `fornecedor` usa `.maybeSingle()` — retorna `null` sem erro quando o CNPJ ainda não foi enriquecido. Os badges do header simplesmente não aparecem. Isso permite que a página funcione em produção antes da Fase 2 ser implementada.
 
+### 6. Colunas novas não aplicadas no Supabase antes do primeiro upsert
+
+**Problema:** o script processou com sucesso todos os arquivos (45 min de download + parsing) e travou apenas na hora de gravar, com `psycopg.errors.UndefinedColumn: column "motivo_situacao_cadastral" of relation "fornecedor" does not exist`. As migrações `ALTER TABLE` tinham sido omitidas na aplicação ao Supabase.
+
+**Solução:** como todos os arquivos já estavam em cache local, bastou rodar as migrações no SQL Editor e re-executar o script. A re-execução levou apenas alguns minutos (sem re-download). Lição: aplicar sempre as migrações de schema **antes** de rodar o script de ingestão.
+
 ---
 
-## Próximos passos (Fase 2)
+## Decisões de arquitetura (Fase 2)
 
-1. Validar URL de download da Receita Federal com `requests.head()`.
-2. Implementar `ingestao/scripts/ingestao_fornecedores.py` com abordagem de reverse lookup.
-3. Adicionar o script ao workflow `ingest.yml` (rodar após as despesas, pois depende de `despesa` populada).
-4. Testar os badges de situação cadastral, porte e localidade no header da página.
+### Reverse lookup em vez de ingestão completa
+
+O dataset da Receita Federal tem ~60 milhões de estabelecimentos (~30 GB descomprimidos). A abordagem de reverse lookup — extrair os CNPJs do banco e filtrar ao varrer os arquivos — reduz o resultado final a ~46 mil linhas na tabela `fornecedor`, cabendo em poucos MB no tier gratuito do Supabase.
+
+### Cache por mês no disco
+
+Cada arquivo é nomeado `{RF_MES}_{arquivo}.zip` (ex.: `2026-07_Empresas0.zip`). Isso permite:
+- Re-execução sem re-download (idempotência de rede)
+- Manter múltiplos meses em cache para auditar diferenças
+- Forçar re-download apagando apenas os arquivos do mês desejado
+
+### Sócios: DELETE + INSERT em vez de ON CONFLICT
+
+O quadro societário não tem chave única confiável na fonte (mesmo sócio pode ter qualificações trocadas, datas corrigidas retroativamente). A estratégia `DELETE WHERE fornecedor_cnpj = %s` + re-inserção garante idempotência sem depender de uma chave composta frágil.
+
+### CPF de sócios: apenas referência parcial
+
+O campo `cpf_representante_legal` armazena o CPF já mascarado pela própria Receita Federal (três primeiros dígitos e dois verificadores ocultos, conforme LGPD). Não é exibido como identificador completo na UI — serve apenas como referência parcial de que o sócio é pessoa física.
+
+---
+
+## Próximos passos
+
+1. Adicionar `ingestao_fornecedores.py` ao workflow `ingest.yml` (rodar após `ingestao_despesas.py` e `ingestao_despesas_senadores.py`, pois depende de `despesa` populada).
+2. Atualizar mensalmente: basta rodar o script com `RF_MES` do mês corrente — o cache do mês anterior permanece intocado.
