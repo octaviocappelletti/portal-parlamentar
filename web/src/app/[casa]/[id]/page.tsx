@@ -1,7 +1,7 @@
 import { supabase } from "@/lib/db";
 import PainelAtuacao from "@/components/PainelAtuacao";
 import TabsDetalhe from "@/components/TabsDetalhe";
-import type { Despesa, Mandato, Parlamentar, Proposicao } from "@/types";
+import type { DespesaResumoAno, Mandato, Parlamentar, Proposicao } from "@/types";
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -43,7 +43,7 @@ export default async function DetalhePage({ params, searchParams }: Props) {
 
   if (!parlamentar) notFound();
 
-  const [{ data: mandatos }, { data: proposicoes }, { data: despesas }] = await Promise.all([
+  const [{ data: mandatos }, { data: proposicoes }, { data: resumoAno }] = await Promise.all([
     supabase.from("mandato").select("*").eq("parlamentar_id", parlamentar.id).order("legislatura"),
     supabase
       .from("proposicao")
@@ -51,15 +51,19 @@ export default async function DetalhePage({ params, searchParams }: Props) {
       .eq("parlamentar_id", parlamentar.id)
       .order("ano", { ascending: false }),
     supabase
-      .from("despesa")
+      .from("despesa_resumo_ano")
       .select("*")
       .eq("parlamentar_id", parlamentar.id)
-      .order("ano", { ascending: false })
-      .order("mes", { ascending: false }),
+      .order("ano", { ascending: false }),
   ]);
 
-  const totalGasto = (despesas ?? []).reduce(
-    (acc: number, d: Despesa) => acc + (d.valor_liquido ?? 0),
+  // Totais para o PainelAtuacao derivados do resumo por ano (leve, sem carregar N mil linhas)
+  const totalGasto = (resumoAno ?? []).reduce(
+    (acc: number, r: DespesaResumoAno) => acc + (r.total ?? 0),
+    0
+  );
+  const totalDespesas = (resumoAno ?? []).reduce(
+    (acc: number, r: DespesaResumoAno) => acc + (r.lancamentos ?? 0),
     0
   );
   const aprovadas = (proposicoes ?? []).filter((p: Proposicao) => p.aprovada).length;
@@ -136,16 +140,17 @@ export default async function DetalhePage({ params, searchParams }: Props) {
         aprovadas={aprovadas}
         aprovadasPrimeiroAutor={aprovadasPrimeiroAutor}
         totalGasto={totalGasto}
-        totalDespesas={(despesas ?? []).length}
+        totalDespesas={totalDespesas}
       />
 
       {/* Tabs — projetos e despesas */}
       <div className="mt-6">
         <TabsDetalhe
           proposicoes={(proposicoes ?? []) as Proposicao[]}
-          despesas={(despesas ?? []) as Despesa[]}
+          resumoAno={(resumoAno ?? []) as DespesaResumoAno[]}
           casa={parlamentar.casa}
           parlamentarId={parlamentar.id_externo}
+          parlamentarDbId={parlamentar.id}
           initialAba={initialAba}
           initialFiltro={initialFiltro}
         />

@@ -13,11 +13,11 @@ async function fetchStats() {
     { data: gastoData },
   ] = await Promise.all([
     supabase.from("parlamentar").select("*", { count: "exact", head: true }).eq("casa", "camara").eq("situacao", "Exercício"),
-    supabase.from("parlamentar").select("*", { count: "exact", head: true }).eq("casa", "senado"),
+    supabase.from("parlamentar").select("*", { count: "exact", head: true }).eq("casa", "senado").eq("situacao", "Exercício"),
     supabase.from("proposicao").select("*", { count: "exact", head: true }),
-    supabase.from("despesa").select("valor_liquido"),
+    supabase.from("despesa_totais").select("total_geral").single(),
   ]);
-  const totalGasto = (gastoData ?? []).reduce((s, d) => s + (d.valor_liquido ?? 0), 0);
+  const totalGasto = (gastoData as { total_geral: number } | null)?.total_geral ?? 0;
   return { totalCamara, totalSenado, totalProps, totalGasto };
 }
 

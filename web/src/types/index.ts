@@ -50,3 +50,11 @@ export interface Despesa {
   detalhamento?: string;
   documento?: string;
 }
+
+/** Linha da view despesa_resumo_ano — carregada em SSR para montar a timeline. */
+export interface DespesaResumoAno {
+  parlamentar_id: number;
+  ano: number;
+  total: number;        // SUM(valor_liquido)::FLOAT8
+  lancamentos: number;  // COUNT(*)::INT
+}

@@ -17,10 +17,10 @@ def upsert_parlamentar(conn: psycopg.Connection, p: dict) -> int:
         cur.execute(
             """
             INSERT INTO parlamentar
-              (casa, id_externo, nome, nome_civil, partido, uf, foto_url, cpf, data_nascimento)
+              (casa, id_externo, nome, nome_civil, partido, uf, foto_url, cpf, data_nascimento, situacao)
             VALUES
               (%(casa)s, %(id_externo)s, %(nome)s, %(nome_civil)s, %(partido)s,
-               %(uf)s, %(foto_url)s, %(cpf)s, %(data_nascimento)s)
+               %(uf)s, %(foto_url)s, %(cpf)s, %(data_nascimento)s, %(situacao)s)
             ON CONFLICT (casa, id_externo) DO UPDATE SET
               nome            = EXCLUDED.nome,
               nome_civil      = EXCLUDED.nome_civil,
@@ -29,6 +29,7 @@ def upsert_parlamentar(conn: psycopg.Connection, p: dict) -> int:
               foto_url        = EXCLUDED.foto_url,
               cpf             = EXCLUDED.cpf,
               data_nascimento = EXCLUDED.data_nascimento,
+              situacao        = EXCLUDED.situacao,
               updated_at      = NOW()
             RETURNING id
             """,
@@ -62,7 +63,7 @@ def upsert_proposicao(conn: psycopg.Connection, p: dict) -> None:
               (%(parlamentar_id)s, %(casa)s, %(tipo)s, %(numero)s, %(ano)s,
                %(ementa)s, %(autor_principal)s, %(situacao)s, %(aprovada)s,
                %(data_apresentacao)s, %(url_inteiro_teor)s)
-            ON CONFLICT (casa, tipo, numero, ano) DO UPDATE SET
+            ON CONFLICT (casa, tipo, numero, ano, parlamentar_id) DO UPDATE SET
               ementa            = EXCLUDED.ementa,
               autor_principal   = EXCLUDED.autor_principal,
               situacao          = EXCLUDED.situacao,
