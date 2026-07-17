@@ -108,7 +108,7 @@ def enrich_proposicao(prop: dict, dep_interno_id: int) -> dict | None:
             if autor.get("proponente") or str(autor.get("ordemAssinatura", "")) == "1":
                 # Verifica se é este deputado
                 uri = autor.get("uri", "")
-                if str(dep_interno_id) in uri.split("/")[-1]:
+                if uri.split("/")[-1] == str(dep_interno_id):
                     autor_principal = True
                     break
     except Exception:
