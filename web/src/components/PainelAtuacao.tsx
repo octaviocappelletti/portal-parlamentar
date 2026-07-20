@@ -28,7 +28,7 @@ export default function PainelAtuacao({
     totalProposicoes > 0 ? `${Math.round((n / totalProposicoes) * 100)}% do total` : "0% do total";
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
       <Stat
         href={`${base}?aba=projetos`}
         label="Proposições"
@@ -91,19 +91,19 @@ function Stat({
   return (
     <Link
       href={href}
-      className="card p-4 hover:shadow-md hover:border-slate-300 transition-all block group"
+      className="card p-4 hover:shadow-md hover:border-marinho-200 transition block group"
     >
-      <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-1 group-hover:text-slate-500 transition-colors">
+      <p className="section-label mb-1 group-hover:text-slate-800 transition-colors">
         {label}
       </p>
       <p
-        className={`text-2xl font-bold leading-tight ${
+        className={`text-2xl font-bold leading-tight break-all ${
           highlight ? "text-green-600" : "text-slate-900"
         }`}
       >
         {value}
       </p>
-      <p className="text-xs text-slate-400 mt-1">{sub}</p>
+      <p className="text-xs text-slate-500 mt-1">{sub}</p>
     </Link>
   );
 }

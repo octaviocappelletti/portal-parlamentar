@@ -3,10 +3,18 @@ import type { Despesa } from "@/types";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-export const revalidate = 604800; // 1 semana
+export const revalidate = 604800;
 
 const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
-const MESES = ["", "Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+const MESES = [
+  "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+const LABELS_CASA: Record<string, string> = {
+  camara: "Câmara dos Deputados",
+  senado: "Senado Federal",
+};
 
 interface Props {
   params: Promise<{ casa: string; id: string; despesaId: string }>;
@@ -17,7 +25,7 @@ export default async function DespesaPage({ params }: Props) {
 
   const { data: parlamentar } = await supabase
     .from("parlamentar")
-    .select("id")
+    .select("id, nome")
     .eq("casa", casa)
     .eq("id_externo", Number(id))
     .single();
@@ -34,58 +42,80 @@ export default async function DespesaPage({ params }: Props) {
   if (!despesa) notFound();
 
   return (
-    <main className="p-8 max-w-2xl mx-auto">
-      <Link href={`/${casa}/${id}`} className="text-sm text-blue-600 hover:underline mb-6 block">
-        &larr; Voltar ao parlamentar
-      </Link>
+    <main className="max-w-2xl mx-auto px-6 py-8">
+      <nav aria-label="Localização" className="text-sm text-slate-500 mb-6 flex items-center gap-2">
+        <Link href="/" className="hover:text-slate-700 transition-colors">Início</Link>
+        <span>/</span>
+        <Link href={`/${casa}`} className="hover:text-slate-700 transition-colors">{LABELS_CASA[casa] ?? casa}</Link>
+        <span>/</span>
+        <Link href={`/${casa}/${id}`} className="hover:text-slate-700 transition-colors">{parlamentar.nome}</Link>
+        <span>/</span>
+        <span className="text-slate-700 font-medium truncate">Despesa</span>
+      </nav>
 
-      <h1 className="text-xl font-bold mb-6">Despesa — {despesa.natureza}</h1>
-
-      <dl className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
-        <div>
-          <dt className="text-gray-400">Competência</dt>
-          <dd>{MESES[despesa.mes]}/{despesa.ano}</dd>
-        </div>
-        <div>
-          <dt className="text-gray-400">Valor reembolsado</dt>
-          <dd className="font-semibold">{BRL.format(despesa.valor_liquido ?? 0)}</dd>
-        </div>
-        {(despesa.valor_glosa ?? 0) > 0 && (
-          <div>
-            <dt className="text-gray-400">Valor glosado</dt>
-            <dd className="text-red-600">{BRL.format(despesa.valor_glosa ?? 0)}</dd>
-          </div>
-        )}
-        <div>
-          <dt className="text-gray-400">Fornecedor</dt>
-          <dd>{despesa.fornecedor ?? "—"}</dd>
-        </div>
-        {despesa.cpf_cnpj && (
-          <div>
-            <dt className="text-gray-400">CPF/CNPJ</dt>
-            <dd className="font-mono">{despesa.cpf_cnpj}</dd>
-          </div>
-        )}
+      <div className="card p-6 mb-5">
+        <h1 className="text-xl font-bold text-slate-900 leading-tight">
+          {despesa.natureza ?? "Despesa"}
+        </h1>
         {despesa.detalhamento && (
-          <div className="col-span-2">
-            <dt className="text-gray-400">Detalhamento</dt>
-            <dd>{despesa.detalhamento}</dd>
-          </div>
+          <p className="text-sm text-slate-500 mt-1.5">{despesa.detalhamento}</p>
         )}
-      </dl>
+      </div>
+
+      <div className="card overflow-hidden mb-5">
+        <dl className="divide-y divide-slate-100">
+          <Row label="Competência" value={`${MESES[despesa.mes]} / ${despesa.ano}`} />
+          <Row
+            label="Valor reembolsado"
+            value={
+              <span className="font-semibold font-mono text-slate-900">
+                {BRL.format(despesa.valor_liquido ?? 0)}
+              </span>
+            }
+          />
+          {(despesa.valor_glosa ?? 0) > 0 && (
+            <Row
+              label="Valor glosado"
+              value={
+                <span className="text-red-600 font-medium font-mono">
+                  {BRL.format(despesa.valor_glosa ?? 0)}
+                </span>
+              }
+            />
+          )}
+          <Row label="Fornecedor" value={despesa.fornecedor ?? "—"} />
+          {despesa.cpf_cnpj && (
+            <Row label="CPF / CNPJ" value={<span className="font-mono">{despesa.cpf_cnpj}</span>} />
+          )}
+        </dl>
+      </div>
 
       {despesa.url_documento ? (
         <a
           href={despesa.url_documento}
           target="_blank"
           rel="noopener noreferrer"
-          className="mt-8 inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+          className="inline-flex items-center gap-2 px-4 py-2 bg-marinho-700 text-white rounded-lg hover:bg-marinho-800 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-marinho-600 focus-visible:ring-offset-2"
         >
-          Ver nota fiscal / documento (fonte oficial)
+          Ver documento original (fonte oficial) ↗
         </a>
       ) : (
-        <p className="mt-8 text-sm text-gray-400">Documento não disponível.</p>
+        <p className="text-sm text-slate-500">Documento não disponível.</p>
       )}
+
+      <p className="text-xs text-slate-500 mt-8">
+        Cota para Exercício da Atividade Parlamentar (CEAP) — {LABELS_CASA[casa] ?? casa}.
+        Fonte oficial.
+      </p>
     </main>
+  );
+}
+
+function Row({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-3 gap-4 px-5 py-3.5 items-baseline">
+      <dt className="text-xs text-slate-500 font-medium">{label}</dt>
+      <dd className="col-span-2 text-sm text-slate-800">{value}</dd>
+    </div>
   );
 }

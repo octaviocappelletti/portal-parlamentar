@@ -72,15 +72,15 @@ export default async function DetalhePage({ params, searchParams }: Props) {
     (p: Proposicao) => p.aprovada && p.autor_principal
   ).length;
 
-  const corCasa = casa === "camara" ? "bg-blue-600" : "bg-emerald-700";
+  const corCasa = casa === "camara" ? "bg-marinho-700" : "bg-green-700";
 
   return (
     <main className="max-w-5xl mx-auto px-6 py-8">
       {/* Breadcrumb */}
-      <nav className="text-sm text-slate-400 mb-6 flex items-center gap-2">
-        <Link href="/" className="hover:text-slate-600">Início</Link>
+      <nav aria-label="Localização" className="text-sm text-slate-500 mb-6 flex items-center gap-2">
+        <Link href="/" className="hover:text-slate-700 transition-colors">Início</Link>
         <span>/</span>
-        <Link href={`/${casa}`} className="hover:text-slate-600">{LABELS[casa]}</Link>
+        <Link href={`/${casa}`} className="hover:text-slate-700 transition-colors">{LABELS[casa]}</Link>
         <span>/</span>
         <span className="text-slate-600 font-medium">{parlamentar.nome}</span>
       </nav>
@@ -97,7 +97,7 @@ export default async function DetalhePage({ params, searchParams }: Props) {
               className="rounded-full object-cover ring-4 ring-slate-100"
             />
           ) : (
-            <div className="w-[100px] h-[100px] rounded-full bg-slate-200 flex items-center justify-center text-3xl font-bold text-slate-400">
+            <div className="w-[100px] h-[100px] rounded-full bg-slate-200 flex items-center justify-center text-3xl font-bold text-slate-500">
               {parlamentar.nome.charAt(0)}
             </div>
           )}
@@ -116,12 +116,12 @@ export default async function DetalhePage({ params, searchParams }: Props) {
             {parlamentar.uf && (
               <span className="badge badge-gray">{parlamentar.uf}</span>
             )}
-            <span className={`badge ${casa === "camara" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700"}`}>
+            <span className={`badge ${casa === "camara" ? "bg-marinho-100 text-marinho-700" : "bg-green-100 text-green-700"}`}>
               {LABELS[casa]}
             </span>
           </div>
           {(mandatos ?? []).map((m: Mandato) => (
-            <p key={m.id} className="text-xs text-slate-400 mt-2">
+            <p key={m.id} className="text-xs text-slate-500 mt-2">
               {m.legislatura}ª Legislatura
               {m.data_inicio
                 ? ` · desde ${new Date(m.data_inicio).toLocaleDateString("pt-BR")}`

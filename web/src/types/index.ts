@@ -51,6 +51,11 @@ export interface Despesa {
   documento?: string;
 }
 
+export interface CnaeItem {
+  codigo: string;
+  descricao: string;
+}
+
 export interface Fornecedor {
   id: number;
   cnpj: string;
@@ -58,16 +63,36 @@ export interface Fornecedor {
   nome_fantasia?: string;
   situacao_cadastral?: string;
   data_situacao_cadastral?: string;
+  motivo_situacao_cadastral?: string;
   data_inicio_atividade?: string;
   cnae_principal?: string;
+  cnae_principal_descricao?: string;
+  cnae_secundarios?: CnaeItem[];
+  natureza_juridica_codigo?: string;
+  natureza_juridica_descricao?: string;
   porte_empresa?: string;
   capital_social?: string;
+  opcao_simples?: boolean;
+  opcao_mei?: boolean;
   logradouro?: string;
   numero?: string;
   bairro?: string;
   municipio?: string;
   uf?: string;
   cep?: string;
+  enriched_at?: string;
+}
+
+export interface FornecedorSocio {
+  id: number;
+  fornecedor_cnpj: string;
+  nome?: string;
+  identificador_socio?: string;  // '1'=PJ  '2'=PF  '3'=Estrangeiro
+  qualificacao_codigo?: string;
+  qualificacao_descricao?: string;
+  data_entrada_sociedade?: string;
+  faixa_etaria?: string;
+  cpf_representante_legal?: string;
 }
 
 /** Linha da view despesa_resumo_ano — carregada em SSR para montar a timeline. */

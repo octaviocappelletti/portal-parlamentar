@@ -13,6 +13,11 @@ import {
   YAxis,
 } from "recharts";
 
+// Marinho family — azul da bandeira do Brasil
+const CHART_ACTIVE = "#002776";
+const CHART_DEFAULT = "#3b6fc4";
+const CHART_MUTED = "#c4d2e7";
+
 type StatusFiltro = "Todas" | "Aprovadas" | "Em tramitação" | "Arquivadas";
 const STATUS_FILTROS: StatusFiltro[] = ["Todas", "Aprovadas", "Em tramitação", "Arquivadas"];
 
@@ -80,29 +85,30 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
       {dadosPorAno.length >= 2 && (
         <div className="card p-4 mb-5">
           <div className="flex items-center justify-between mb-3">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+            <p className="section-label" id="chart-proposicoes-label">
               Proposições por ano
             </p>
             {anoFiltro && (
               <button
                 onClick={() => setAnoFiltro(null)}
-                className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                className="text-xs text-marinho-700 hover:underline transition-colors flex items-center gap-1"
               >
                 Mostrando {anoFiltro} · limpar filtro ×
               </button>
             )}
           </div>
+          <div role="img" aria-labelledby="chart-proposicoes-label">
           <ResponsiveContainer width="100%" height={150}>
             <BarChart data={dadosPorAno} barCategoryGap="35%" margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
               <XAxis
                 dataKey="ano"
-                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                tick={{ fontSize: 11, fill: "#64748b" }}
                 axisLine={false}
                 tickLine={false}
               />
               <YAxis
                 allowDecimals={false}
-                tick={{ fontSize: 11, fill: "#94a3b8" }}
+                tick={{ fontSize: 11, fill: "#64748b" }}
                 axisLine={false}
                 tickLine={false}
                 width={28}
@@ -124,16 +130,17 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
                     key={entry.ano}
                     fill={
                       anoFiltro === null
-                        ? "#3b82f6"
+                        ? CHART_DEFAULT
                         : anoFiltro === entry.ano
-                        ? "#1d4ed8"
-                        : "#cbd5e1"
+                        ? CHART_ACTIVE
+                        : CHART_MUTED
                     }
                   />
                 ))}
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+          </div>
         </div>
       )}
 
@@ -162,7 +169,7 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
             onClick={() => setSoAutor((v) => !v)}
             className={`px-3 py-1 text-xs font-medium rounded-full border transition-colors ${
               soAutor
-                ? "bg-blue-600 text-white border-blue-600"
+                ? "bg-marinho-700 text-white border-marinho-700"
                 : "bg-white text-slate-500 border-slate-200 hover:border-slate-300"
             }`}
           >
@@ -170,21 +177,23 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
           </button>
         )}
 
+        <label htmlFor="busca-proposicoes" className="sr-only">Buscar na ementa</label>
         <input
+          id="busca-proposicoes"
           type="search"
           placeholder="Buscar na ementa..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
           className="input flex-1 min-w-[180px]"
         />
-        <span className="text-xs text-slate-400">
+        <span className="text-xs text-slate-500">
           {filtradas.length} resultado{filtradas.length !== 1 ? "s" : ""}
         </span>
       </div>
 
       {/* Lista */}
       {filtradas.length === 0 ? (
-        <div className="text-center py-12 text-slate-400 text-sm">
+        <div className="text-center py-12 text-slate-500 text-sm">
           Nenhuma proposição encontrada para os filtros selecionados.
         </div>
       ) : (
@@ -195,7 +204,7 @@ export default function ListaProposicoes({ proposicoes, casa, parlamentarId, ini
               href={`/${casa}/${parlamentarId}/projetos/${p.id}`}
               className="flex items-start gap-4 px-4 py-3.5 hover:bg-slate-50 transition-colors"
             >
-              <span className="font-mono text-xs text-slate-400 flex-shrink-0 pt-0.5 w-[120px]">
+              <span className="font-mono text-xs text-slate-500 flex-shrink-0 pt-0.5 w-[120px]">
                 {p.tipo} {p.numero}/{p.ano}
               </span>
               <p className="flex-1 text-sm text-slate-700 line-clamp-2 leading-snug">

@@ -34,15 +34,17 @@ export default function TabsDetalhe({
 
   return (
     <div>
-      <div className="flex border-b border-slate-200 mb-6 gap-1">
+      <div role="tablist" className="flex border-b border-slate-200 mb-6 gap-1">
         {TABS.map((t) => (
           <button
             key={t}
+            role="tab"
+            aria-selected={aba === t}
             onClick={() => setAba(t)}
             className={`tab ${aba === t ? "tab-active" : "tab-inactive"}`}
           >
             {t}
-            <span className="ml-1.5 text-xs text-slate-400">
+            <span className="ml-1.5 text-xs text-slate-500">
               {t === "Projetos de lei"
                 ? proposicoes.length
                 : totalLancamentos.toLocaleString("pt-BR")}
@@ -51,33 +53,35 @@ export default function TabsDetalhe({
         ))}
       </div>
 
-      {aba === "Projetos de lei" ? (
-        proposicoes.length ? (
-          <ListaProposicoes
-            proposicoes={proposicoes}
+      <div role="tabpanel" aria-label={aba}>
+        {aba === "Projetos de lei" ? (
+          proposicoes.length ? (
+            <ListaProposicoes
+              proposicoes={proposicoes}
+              casa={casa}
+              parlamentarId={parlamentarId}
+              initialFiltro={initialFiltro}
+            />
+          ) : (
+            <Vazio>Nenhuma proposição encontrada.</Vazio>
+          )
+        ) : resumoAno.length ? (
+          <TabelaCotas
+            resumoAno={resumoAno}
             casa={casa}
             parlamentarId={parlamentarId}
-            initialFiltro={initialFiltro}
+            parlamentarDbId={parlamentarDbId}
           />
         ) : (
-          <Vazio>Nenhuma proposição encontrada.</Vazio>
-        )
-      ) : resumoAno.length ? (
-        <TabelaCotas
-          resumoAno={resumoAno}
-          casa={casa}
-          parlamentarId={parlamentarId}
-          parlamentarDbId={parlamentarDbId}
-        />
-      ) : (
-        <Vazio>Nenhuma despesa encontrada. Execute a ingestão de despesas primeiro.</Vazio>
-      )}
+          <Vazio>Nenhuma despesa encontrada. Execute a ingestão de despesas primeiro.</Vazio>
+        )}
+      </div>
     </div>
   );
 }
 
 function Vazio({ children }: { children: React.ReactNode }) {
   return (
-    <div className="text-center py-16 text-slate-400 text-sm">{children}</div>
+    <div className="text-center py-16 text-slate-500 text-sm">{children}</div>
   );
 }

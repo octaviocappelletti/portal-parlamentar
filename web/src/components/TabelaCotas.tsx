@@ -13,6 +13,10 @@ import {
   XAxis,
 } from "recharts";
 
+// ── Constantes de cor dos gráficos — marinho (azul da bandeira do Brasil) ────
+const CHART_ACTIVE = "#002776";
+const CHART_DEFAULT = "#3b6fc4";
+
 // ── Formatadores ─────────────────────────────────────────────────────────────
 const BRL = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 const BRL0 = new Intl.NumberFormat("pt-BR", {
@@ -53,11 +57,11 @@ export default function TabelaCotas({
   const MES_ATUAL = new Date().getMonth() + 1;
 
   const anos = useMemo(
-    () => resumoAno.map((r) => r.ano).sort((a, b) => b - a),
+    () => resumoAno.map((r) => r.ano).sort((a, b) => a - b),
     [resumoAno]
   );
 
-  const [anoSel, setAnoSel] = useState<number>(anos[0] ?? ANO_ATUAL);
+  const [anoSel, setAnoSel] = useState<number>(anos[anos.length - 1] ?? ANO_ATUAL);
   const [despesas, setDespesas] = useState<Despesa[]>([]);
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -176,7 +180,7 @@ export default function TabelaCotas({
 
   if (resumoAno.length === 0) {
     return (
-      <div className="text-center py-16 text-slate-400 text-sm">
+      <div className="text-center py-16 text-slate-500 text-sm">
         Nenhuma despesa registrada.
       </div>
     );
@@ -192,7 +196,7 @@ export default function TabelaCotas({
       {/* ── Timeline de anos ─────────────────────────────────────────────── */}
       <div className="card p-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+          <p className="section-label">
             Histórico — {anos.length} ano{anos.length !== 1 ? "s" : ""}
           </p>
           <p className="text-sm text-slate-500">
@@ -202,6 +206,7 @@ export default function TabelaCotas({
         </div>
 
         {/* Mini bar chart histórico */}
+        <div role="img" aria-label={`Total de despesas por ano — ${anos[anos.length - 1]} a ${anos[0]}`}>
         <ResponsiveContainer width="100%" height={80}>
           <BarChart
             data={dadosGrafico}
@@ -215,7 +220,7 @@ export default function TabelaCotas({
           >
             <XAxis
               dataKey="ano"
-              tick={{ fontSize: 10, fill: "#94a3b8" }}
+              tick={{ fontSize: 11, fill: "#64748b" }}
               axisLine={false}
               tickLine={false}
             />
@@ -227,28 +232,35 @@ export default function TabelaCotas({
             />
             <Bar dataKey="total" radius={[3, 3, 0, 0]} style={{ cursor: "pointer" }}>
               {dadosGrafico.map((r) => (
-                <Cell key={r.ano} fill={anoSel === r.ano ? "#1d4ed8" : "#3b82f6"} />
+                <Cell key={r.ano} fill={anoSel === r.ano ? CHART_ACTIVE : CHART_DEFAULT} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
+        </div>
 
         {/* Botões de ano com total */}
         <div className="flex flex-wrap gap-1.5 mt-3">
           {anos.map((a) => {
             const r = resumoAno.find((x) => x.ano === a);
+            const ativo = anoSel === a;
             return (
               <button
                 key={a}
                 onClick={() => setAnoSel(a)}
-                className={`flex flex-col items-center px-3 py-2 rounded-lg text-xs transition-all ${
-                  anoSel === a
-                    ? "bg-blue-600 text-white shadow-sm"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                aria-pressed={ativo}
+                className={`flex flex-col items-center px-3 py-2 rounded-lg text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-1 border ${
+                  ativo
+                    ? "bg-white shadow-sm"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200 border-transparent"
                 }`}
+                style={ativo ? { borderColor: "#0d3170", color: "#0d3170" } : undefined}
               >
                 <span className="font-bold">{a}</span>
-                <span className={`text-[10px] mt-0.5 ${anoSel === a ? "text-blue-200" : "text-slate-400"}`}>
+                <span
+                  className="text-xs mt-0.5"
+                  style={{ color: ativo ? "#3b6fc4" : "#64748b" }}
+                >
                   {BRL0.format(r?.total ?? 0)}
                 </span>
               </button>
@@ -259,7 +271,7 @@ export default function TabelaCotas({
 
       {/* ── Conteúdo do ano selecionado ──────────────────────────────────── */}
       {loading && (
-        <div className="card p-12 text-center text-slate-400 text-sm animate-pulse">
+        <div className="card p-12 text-center text-slate-500 text-sm animate-pulse motion-reduce:animate-none">
           Carregando despesas de {anoSel}…
         </div>
       )}
@@ -301,7 +313,7 @@ export default function TabelaCotas({
           {/* Por categoria */}
           {porCategoria.length > 0 && (
             <div className="card p-5">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">
+              <p className="section-label mb-4">
                 Distribuição por categoria
               </p>
               <div className="space-y-3">
@@ -320,11 +332,11 @@ export default function TabelaCotas({
                       </span>
                       <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
                         <div
-                          className="h-full rounded-full bg-blue-500"
-                          style={{ width: `${pct}%` }}
+                          className="h-full rounded-full"
+                          style={{ width: `${pct}%`, backgroundColor: "#1a4690" }}
                         />
                       </div>
-                      <span className="text-xs text-slate-400 w-8 text-right flex-shrink-0">
+                      <span className="text-xs text-slate-500 w-8 text-right flex-shrink-0">
                         {pct}%
                       </span>
                       <span className="text-sm font-mono text-slate-700 flex-shrink-0 w-32 text-right">
@@ -340,7 +352,7 @@ export default function TabelaCotas({
           {/* Top fornecedores */}
           {porFornecedor.length > 0 && (
             <div className="card p-5">
-              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">
+              <p className="section-label mb-4">
                 Principais fornecedores
               </p>
               <div className="divide-y divide-slate-50">
@@ -350,7 +362,7 @@ export default function TabelaCotas({
                       <p className="text-sm text-slate-700 truncate font-medium" title={nome}>
                         {nome}
                       </p>
-                      <p className="text-xs text-slate-400">{qtd} pagamento{qtd !== 1 ? "s" : ""}</p>
+                      <p className="text-xs text-slate-500">{qtd} pagamento{qtd !== 1 ? "s" : ""}</p>
                     </div>
                     <span className="text-sm font-mono font-semibold text-slate-800 flex-shrink-0">
                       {BRL.format(total)}
@@ -363,14 +375,18 @@ export default function TabelaCotas({
 
           {/* Busca */}
           <div className="flex flex-wrap gap-3 items-center">
+            <label htmlFor="busca-despesas" className="sr-only">
+              Buscar despesas por categoria, fornecedor ou detalhamento
+            </label>
             <input
+              id="busca-despesas"
               type="search"
               placeholder="Buscar por categoria, fornecedor ou detalhamento…"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               className="input flex-1 min-w-[260px]"
             />
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-500">
               {busca
                 ? `${filtradas.length} resultado${filtradas.length !== 1 ? "s" : ""} · ${BRL.format(totalFiltrado)}`
                 : `${despesas.length} lançamentos`}
@@ -379,7 +395,7 @@ export default function TabelaCotas({
 
           {/* Acordeão por mês */}
           {porMes.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 text-sm">
+            <div className="text-center py-10 text-slate-500 text-sm">
               Nenhum lançamento encontrado para a busca.
             </div>
           ) : (
@@ -391,12 +407,13 @@ export default function TabelaCotas({
                     {/* Cabeçalho do mês */}
                     <button
                       onClick={() => toggleMes(mes)}
-                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors text-left"
+                      aria-expanded={aberto}
+                      className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-marinho-600 transition-colors text-left"
                     >
                       <span className="text-sm font-bold text-slate-700 w-28 flex-shrink-0">
                         {MESES_EXT[mes]}
                       </span>
-                      <span className="text-xs text-slate-400">
+                      <span className="text-xs text-slate-500">
                         {itens.length} lançamento{itens.length !== 1 ? "s" : ""}
                       </span>
                       {glosa > 0 && (
@@ -411,6 +428,7 @@ export default function TabelaCotas({
                         className={`text-slate-300 text-xs ml-2 transition-transform duration-200 ${
                           aberto ? "rotate-90" : ""
                         }`}
+                        aria-hidden="true"
                       >
                         ▶
                       </span>
@@ -452,14 +470,14 @@ export default function TabelaCotas({
                                 <td className="px-4 py-2.5 align-top">
                                   <Link
                                     href={`/${casa}/${parlamentarId}/despesas/${d.id}`}
-                                    className="text-slate-800 hover:text-blue-600 hover:underline font-medium block truncate max-w-[170px]"
+                                    className="text-slate-800 hover:text-marinho-700 hover:underline font-medium block truncate max-w-[170px]"
                                     title={d.natureza ?? ""}
                                   >
                                     {d.natureza ?? "—"}
                                   </Link>
                                   {d.detalhamento && (
                                     <span
-                                      className="text-slate-400 block truncate max-w-[170px]"
+                                      className="text-slate-500 block truncate max-w-[170px]"
                                       title={d.detalhamento}
                                     >
                                       {d.detalhamento}
@@ -474,7 +492,7 @@ export default function TabelaCotas({
                                     return cnpj.length === 14 ? (
                                       <Link
                                         href={`/fornecedor/${cnpj}`}
-                                        className="text-slate-700 hover:text-blue-600 hover:underline block truncate max-w-[220px]"
+                                        className="text-slate-700 hover:text-marinho-700 hover:underline block truncate max-w-[220px]"
                                         title={d.fornecedor ?? ""}
                                       >
                                         {d.fornecedor ?? "—"}
@@ -491,7 +509,7 @@ export default function TabelaCotas({
                                 </td>
 
                                 {/* CNPJ/CPF */}
-                                <td className="px-4 py-2.5 font-mono text-slate-400 align-top hidden lg:table-cell whitespace-nowrap">
+                                <td className="px-4 py-2.5 font-mono text-slate-500 align-top hidden lg:table-cell whitespace-nowrap">
                                   {d.cpf_cnpj ? formatDoc(d.cpf_cnpj) : "—"}
                                 </td>
 
@@ -519,7 +537,7 @@ export default function TabelaCotas({
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       title="Ver documento original (fonte oficial)"
-                                      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors text-sm font-bold"
+                                      className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-marinho-50 text-marinho-700 hover:bg-marinho-100 transition-colors text-sm font-bold"
                                     >
                                       ↗
                                     </a>
@@ -536,14 +554,14 @@ export default function TabelaCotas({
                             <tr>
                               <td
                                 colSpan={3}
-                                className="px-4 py-2 text-xs text-slate-400 hidden lg:table-cell"
+                                className="px-4 py-2 text-xs text-slate-500 hidden lg:table-cell"
                               >
                                 {itens.length} lançamento{itens.length !== 1 ? "s" : ""} em{" "}
                                 {MESES_ABR[mes]}
                               </td>
                               <td
                                 colSpan={3}
-                                className="px-4 py-2 text-xs text-slate-400 table-cell lg:hidden"
+                                className="px-4 py-2 text-xs text-slate-500 table-cell lg:hidden"
                               >
                                 {itens.length} lançamento{itens.length !== 1 ? "s" : ""} em{" "}
                                 {MESES_ABR[mes]}
@@ -571,7 +589,7 @@ export default function TabelaCotas({
           )}
 
           {/* Nota de transparência */}
-          <p className="text-xs text-slate-400 text-center pt-2">
+          <p className="text-xs text-slate-500 text-center pt-2">
             Dados da Cota para Exercício da Atividade Parlamentar (CEAP) —{" "}
             {casa === "camara" ? "Câmara dos Deputados" : "Senado Federal"}.
             Fonte oficial. Atualizado periodicamente.
@@ -580,7 +598,7 @@ export default function TabelaCotas({
       )}
 
       {!loading && !erro && despesas.length === 0 && anoSel && (
-        <div className="card p-10 text-center text-slate-400 text-sm">
+        <div className="card p-10 text-center text-slate-500 text-sm">
           Nenhum lançamento registrado em {anoSel}.
         </div>
       )}
@@ -604,7 +622,7 @@ function StatCard({
 }) {
   return (
     <div className="card p-4">
-      <p className="text-xs text-slate-400 font-medium uppercase tracking-wide mb-1">
+      <p className="section-label mb-1">
         {label}
       </p>
       <p
@@ -614,7 +632,7 @@ function StatCard({
       >
         {value}
       </p>
-      <p className="text-xs text-slate-400 mt-1">{sub}</p>
+      <p className="text-xs text-slate-500 mt-1">{sub}</p>
     </div>
   );
 }

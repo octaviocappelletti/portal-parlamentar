@@ -40,7 +40,7 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
   return (
     <div className="card overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-100">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
+        <p className="section-label">
           Parlamentares que contrataram ({grupos.length})
         </p>
       </div>
@@ -55,7 +55,8 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
               {/* Cabeçalho do parlamentar */}
               <button
                 onClick={() => toggle(p.id)}
-                className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 transition-colors text-left"
+                aria-expanded={aberto}
+                className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-marinho-600 transition-colors text-left"
               >
                 {p.foto_url ? (
                   <Image
@@ -66,21 +67,21 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
                     className="rounded-full object-cover flex-shrink-0"
                   />
                 ) : (
-                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-400 flex-shrink-0">
+                  <div className="w-9 h-9 rounded-full bg-slate-200 flex items-center justify-center text-sm font-bold text-slate-500 flex-shrink-0">
                     {p.nome.charAt(0)}
                   </div>
                 )}
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-slate-800 truncate">{p.nome}</p>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-slate-500">
                     {[p.partido, p.uf, p.casa === "camara" ? "Câmara" : "Senado"]
                       .filter(Boolean)
                       .join(" · ")}
                   </p>
                 </div>
 
-                <span className="text-xs text-slate-400 hidden sm:block flex-shrink-0 mr-2">
+                <span className="text-xs text-slate-500 hidden sm:block flex-shrink-0 mr-2">
                   {lancamentos} lançamento{lancamentos !== 1 ? "s" : ""}
                 </span>
                 <span className="text-sm font-mono font-semibold text-slate-800 flex-shrink-0">
@@ -90,6 +91,7 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
                   className={`text-slate-300 text-xs ml-2 flex-shrink-0 transition-transform duration-200 ${
                     aberto ? "rotate-90" : ""
                   }`}
+                  aria-hidden="true"
                 >
                   ▶
                 </span>
@@ -125,14 +127,14 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
                           <td className="px-4 py-2.5 align-top">
                             <Link
                               href={`/${p.casa}/${p.id_externo}/despesas/${d.id}`}
-                              className="text-slate-800 hover:text-blue-600 hover:underline font-medium block truncate max-w-[220px]"
+                              className="text-slate-800 hover:text-marinho-700 hover:underline font-medium block truncate max-w-[220px]"
                               title={d.natureza ?? ""}
                             >
                               {d.natureza ?? "—"}
                             </Link>
                             {d.detalhamento && (
                               <span
-                                className="text-slate-400 block truncate max-w-[220px]"
+                                className="text-slate-500 block truncate max-w-[220px]"
                                 title={d.detalhamento}
                               >
                                 {d.detalhamento}
@@ -140,7 +142,7 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
                             )}
                           </td>
 
-                          <td className="px-4 py-2.5 text-slate-400 align-top hidden sm:table-cell whitespace-nowrap">
+                          <td className="px-4 py-2.5 text-slate-500 align-top hidden sm:table-cell whitespace-nowrap">
                             {MESES[d.mes]}/{d.ano}
                           </td>
 
@@ -165,7 +167,7 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Ver documento original (fonte oficial)"
-                                className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors text-sm font-bold"
+                                className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-marinho-50 text-marinho-700 hover:bg-marinho-100 transition-colors text-sm font-bold"
                               >
                                 ↗
                               </a>
@@ -179,11 +181,11 @@ export default function ParlamentaresFornecedor({ grupos }: { grupos: Parlamenta
 
                     <tfoot className="border-t border-slate-200 bg-slate-100/80">
                       <tr>
-                        <td colSpan={2} className="px-4 py-2 text-xs text-slate-400">
+                        <td colSpan={2} className="px-4 py-2 text-xs text-slate-500">
                           {lancamentos} lançamento{lancamentos !== 1 ? "s" : ""} ·{" "}
                           <Link
                             href={`/${p.casa}/${p.id_externo}`}
-                            className="text-blue-600 hover:underline"
+                            className="text-marinho-700 hover:underline transition-colors"
                           >
                             ver perfil
                           </Link>

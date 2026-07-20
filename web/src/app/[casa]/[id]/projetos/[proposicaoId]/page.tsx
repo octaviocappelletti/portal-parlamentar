@@ -9,6 +9,11 @@ interface Props {
   params: Promise<{ casa: string; id: string; proposicaoId: string }>;
 }
 
+const LABELS_CASA: Record<string, string> = {
+  camara: "Câmara dos Deputados",
+  senado: "Senado Federal",
+};
+
 const SITUACAO_LABEL: Record<string, string> = {
   aprovada: "Aprovada",
   arquivada: "Arquivada",
@@ -18,67 +23,89 @@ const SITUACAO_LABEL: Record<string, string> = {
 export default async function ProposicaoPage({ params }: Props) {
   const { casa, id, proposicaoId } = await params;
 
-  const { data: proposicao } = await supabase
-    .from("proposicao")
-    .select("*")
-    .eq("id", Number(proposicaoId))
-    .single<Proposicao>();
+  const [{ data: parlamentar }, { data: proposicao }] = await Promise.all([
+    supabase
+      .from("parlamentar")
+      .select("nome")
+      .eq("casa", casa)
+      .eq("id_externo", Number(id))
+      .single(),
+    supabase
+      .from("proposicao")
+      .select("*")
+      .eq("id", Number(proposicaoId))
+      .single<Proposicao>(),
+  ]);
 
   if (!proposicao) notFound();
 
   return (
-    <main className="p-8 max-w-3xl mx-auto">
-      <Link href={`/${casa}/${id}`} className="text-sm text-blue-600 hover:underline mb-6 block">
-        &larr; Voltar ao parlamentar
-      </Link>
-
-      <div className="flex gap-3 items-center mb-4">
-        <span className="font-mono text-lg font-bold">
+    <main className="max-w-3xl mx-auto px-6 py-8">
+      <nav aria-label="Localização" className="text-sm text-slate-500 mb-6 flex items-center gap-2">
+        <Link href="/" className="hover:text-slate-700 transition-colors">Início</Link>
+        <span>/</span>
+        <Link href={`/${casa}`} className="hover:text-slate-700 transition-colors">{LABELS_CASA[casa] ?? casa}</Link>
+        <span>/</span>
+        <Link href={`/${casa}/${id}`} className="hover:text-slate-700 transition-colors">
+          {parlamentar?.nome ?? "Parlamentar"}
+        </Link>
+        <span>/</span>
+        <span className="text-slate-700 font-medium">
           {proposicao.tipo} {proposicao.numero}/{proposicao.ano}
         </span>
-        {proposicao.situacao && (
-          <span
-            className={`text-xs px-2 py-1 rounded-full font-medium ${
-              proposicao.aprovada
-                ? "bg-green-100 text-green-700"
-                : proposicao.situacao === "arquivada"
-                ? "bg-gray-100 text-gray-500"
-                : "bg-yellow-100 text-yellow-700"
-            }`}
-          >
-            {SITUACAO_LABEL[proposicao.situacao] ?? proposicao.situacao}
+      </nav>
+
+      <div className="card p-6 mb-5">
+        <div className="flex flex-wrap gap-2 items-center mb-3">
+          <span className="font-mono text-lg font-bold text-slate-900">
+            {proposicao.tipo} {proposicao.numero}/{proposicao.ano}
           </span>
-        )}
-        {proposicao.autor_principal === false && (
-          <span className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-500">
-            Não é 1º autor
-          </span>
+          {proposicao.situacao && (
+            <span
+              className={`badge ${
+                proposicao.aprovada
+                  ? "badge-green"
+                  : proposicao.situacao === "arquivada"
+                  ? "badge-gray"
+                  : "badge-yellow"
+              }`}
+            >
+              {SITUACAO_LABEL[proposicao.situacao] ?? proposicao.situacao}
+            </span>
+          )}
+          {proposicao.autor_principal === false && (
+            <span className="badge badge-gray">Não é 1º autor</span>
+          )}
+        </div>
+
+        {proposicao.ementa && (
+          <p className="text-slate-700 leading-relaxed">{proposicao.ementa}</p>
         )}
       </div>
 
-      {proposicao.ementa && (
-        <p className="text-gray-700 mb-6 leading-relaxed">{proposicao.ementa}</p>
-      )}
+      <div className="flex flex-wrap gap-4 items-center">
+        {proposicao.data_apresentacao && (
+          <p className="text-sm text-slate-500">
+            Apresentada em{" "}
+            <span className="text-slate-700 font-medium">
+              {new Date(proposicao.data_apresentacao).toLocaleDateString("pt-BR")}
+            </span>
+          </p>
+        )}
 
-      {proposicao.data_apresentacao && (
-        <p className="text-sm text-gray-400 mb-4">
-          Apresentada em{" "}
-          {new Date(proposicao.data_apresentacao).toLocaleDateString("pt-BR")}
-        </p>
-      )}
-
-      {proposicao.url_inteiro_teor ? (
-        <a
-          href={proposicao.url_inteiro_teor}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-block px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
-        >
-          Ver íntegra (fonte oficial)
-        </a>
-      ) : (
-        <p className="text-sm text-gray-400">Íntegra não disponível.</p>
-      )}
+        {proposicao.url_inteiro_teor ? (
+          <a
+            href={proposicao.url_inteiro_teor}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-marinho-700 text-white rounded-lg hover:bg-marinho-800 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-marinho-600 focus-visible:ring-offset-2"
+          >
+            Ver íntegra (fonte oficial) ↗
+          </a>
+        ) : (
+          <p className="text-sm text-slate-500">Íntegra não disponível.</p>
+        )}
+      </div>
     </main>
   );
 }

@@ -48,7 +48,7 @@ export default async function ListaPage({ params }: Props) {
     <main className="max-w-7xl mx-auto px-6 py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">{LABELS[casa]}</h1>
-        <p className="text-sm text-slate-400 mt-1">{parlamentares.length} parlamentares</p>
+        <p className="text-sm text-slate-500 mt-1">{parlamentares.length} parlamentares</p>
       </div>
       <FiltroParlamentares
         parlamentares={parlamentares as Parlamentar[]}
