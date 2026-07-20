@@ -40,19 +40,20 @@ TIPOS_VALIDOS = {"PEC", "PL"}
 # Expandir esta lista se o diagnóstico revelar outros valores válidos.
 OBJETIVO_AUTORIA = {"iniciadora", "subscritora", "subscritor", "autor", "autora"}
 
-# Titulares afastados — excluídos da ingestão normal.
-# Formato: {id_externo: "motivo"}
-EXCLUIDOS = {
-    5929: "Mandato cassado — Juíza Selma (MT)",
-    5016: "Afastado para exercer cargo de Ministro — Wellington Dias (PI)",
-}
 
-# Suplentes atualmente no exercício do mandato (titular afastado/cassado).
-# São buscados individualmente pois não constam como Titulares na listagem da API.
-# Formato: {id_externo: "motivo"}
-SUPLENTES_EM_EXERCICIO = {
-    6369: "Suplente em exercício — Jussara Lima (PI), substituindo Wellington Dias",
-}
+def load_overrides(conn) -> tuple[dict[int, str], dict[int, str]]:
+    """Carrega EXCLUIDOS e SUPLENTES_EM_EXERCICIO da tabela override_senador."""
+    excluidos: dict[int, str] = {}
+    suplentes: dict[int, str] = {}
+    with conn.cursor() as cur:
+        cur.execute("SELECT id_externo, tipo, motivo FROM override_senador")
+        for id_ext, tipo, motivo in cur.fetchall():
+            if tipo == "excluido":
+                excluidos[id_ext] = motivo or ""
+            elif tipo == "suplente_exercicio":
+                suplentes[id_ext] = motivo or ""
+    print(f"-> overrides: {len(excluidos)} excluídos | {len(suplentes)} suplentes em exercício")
+    return excluidos, suplentes
 
 # "PL 372/2021", "PEC 71/2012", "PLS 990/2019" etc.
 RE_IDENT = re.compile(r"^(\w+)\s+(\d+)/(\d{4})")
@@ -160,7 +161,7 @@ def _participacao(p: dict) -> str:
     return mandato.get("DescricaoParticipacao", "")
 
 
-def fetch_senadores() -> list[dict]:
+def fetch_senadores(suplentes_em_exercicio: dict[int, str]) -> list[dict]:
     """
     Lista apenas os senadores Titulares da legislatura vigente (§6.16).
     A API retorna 3 pessoas por vaga (Titular + 1º Suplente + 2º Suplente).
@@ -176,7 +177,7 @@ def fetch_senadores() -> list[dict]:
     titulares = [p for p in todos if _participacao(p) == "Titular"]
 
     # Inclui suplentes em exercício buscando-os individualmente pelo endpoint de detalhe
-    for cod, motivo in SUPLENTES_EM_EXERCICIO.items():
+    for cod, motivo in suplentes_em_exercicio.items():
         if any(int(p.get("IdentificacaoParlamentar", {}).get("CodigoParlamentar", 0)) == cod
                for p in titulares):
             continue  # já está na lista
@@ -217,7 +218,7 @@ def parse_senador(p: dict) -> dict:
         "foto_url": dados.get("UrlFotoParlamentar"),
         "cpf": None,  # §6.8
         "data_nascimento": None,
-        "situacao": "Exercício",  # já filtrado por Titulares + SUPLENTES_EM_EXERCICIO
+        "situacao": "Exercício",  # já filtrado por Titulares + suplentes_em_exercicio
     }
 
 
@@ -312,15 +313,18 @@ def fetch_processos(cod: int, data_inicio: str | None) -> list[dict]:
 
 
 def main() -> None:
-    senadores_raw = fetch_senadores()
+    with get_conn() as conn:
+        excluidos, suplentes_em_exercicio = load_overrides(conn)
+
+    senadores_raw = fetch_senadores(suplentes_em_exercicio)
 
     with get_conn() as conn:
         for p in senadores_raw:
             dados = p.get("IdentificacaoParlamentar", {})
             cod = int(dados.get("CodigoParlamentar", 0))
 
-            if cod in EXCLUIDOS:
-                print(f"  IGNORADO {cod} {dados.get('NomeParlamentar', '')} — {EXCLUIDOS[cod]}")
+            if cod in excluidos:
+                print(f"  IGNORADO {cod} {dados.get('NomeParlamentar', '')} — {excluidos[cod]}")
                 continue
 
             print(f"  senador {cod} {dados.get('NomeParlamentar', '')}")

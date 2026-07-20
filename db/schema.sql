@@ -30,6 +30,23 @@ CREATE TABLE IF NOT EXISTS mandato (
   UNIQUE (parlamentar_id, legislatura)
 );
 
+-- Overrides manuais de senadores — substitui os dicts hardcoded no script de ingestão.
+-- tipo 'excluido'            → senador ignorado na ingestão (mandato cassado, afastado etc.)
+-- tipo 'suplente_exercicio'  → suplente incluso individualmente (titular afastado/cassado)
+CREATE TABLE IF NOT EXISTS override_senador (
+  id_externo  INTEGER  NOT NULL,
+  tipo        TEXT     NOT NULL CHECK (tipo IN ('excluido', 'suplente_exercicio')),
+  motivo      TEXT,
+  UNIQUE (id_externo, tipo)
+);
+
+-- Seed dos overrides vigentes em 2026-07
+INSERT INTO override_senador (id_externo, tipo, motivo) VALUES
+  (5929, 'excluido',           'Mandato cassado — Juíza Selma (MT)'),
+  (5016, 'excluido',           'Afastado para exercer cargo de Ministro — Wellington Dias (PI)'),
+  (6369, 'suplente_exercicio', 'Suplente em exercício — Jussara Lima (PI), substituindo Wellington Dias')
+ON CONFLICT (id_externo, tipo) DO UPDATE SET motivo = EXCLUDED.motivo;
+
 -- Chave de dedup: (casa, tipo, numero, ano, parlamentar_id)
 -- Uma linha por (proposição × parlamentar) — permite coautorias corretamente.
 CREATE TABLE IF NOT EXISTS proposicao (
@@ -93,11 +110,21 @@ ALTER TABLE proposicao  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE despesa     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE presenca    ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "leitura publica" ON parlamentar FOR SELECT USING (true);
-CREATE POLICY "leitura publica" ON mandato     FOR SELECT USING (true);
-CREATE POLICY "leitura publica" ON proposicao  FOR SELECT USING (true);
-CREATE POLICY "leitura publica" ON despesa     FOR SELECT USING (true);
-CREATE POLICY "leitura publica" ON presenca    FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON parlamentar FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON mandato     FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON proposicao  FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON despesa     FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON presenca    FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Índices para as queries mais comuns do front
 CREATE INDEX IF NOT EXISTS idx_parlamentar_casa         ON parlamentar(casa);
@@ -174,7 +201,9 @@ ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS opcao_simples               BOOL
 ALTER TABLE fornecedor ADD COLUMN IF NOT EXISTS opcao_mei                   BOOLEAN;
 
 ALTER TABLE fornecedor ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "leitura publica" ON fornecedor FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON fornecedor FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 GRANT SELECT ON fornecedor TO anon, authenticated;
 
 -- Quadro societário dos fornecedores
@@ -191,7 +220,9 @@ CREATE TABLE IF NOT EXISTS fornecedor_socio (
 );
 
 ALTER TABLE fornecedor_socio ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "leitura publica" ON fornecedor_socio FOR SELECT USING (true);
+DO $$ BEGIN
+  CREATE POLICY "leitura publica" ON fornecedor_socio FOR SELECT USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 GRANT SELECT ON fornecedor_socio TO anon, authenticated;
 
 CREATE INDEX IF NOT EXISTS idx_fornecedor_socio_cnpj ON fornecedor_socio(fornecedor_cnpj);

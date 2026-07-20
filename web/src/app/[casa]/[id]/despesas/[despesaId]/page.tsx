@@ -15,10 +15,20 @@ interface Props {
 export default async function DespesaPage({ params }: Props) {
   const { casa, id, despesaId } = await params;
 
+  const { data: parlamentar } = await supabase
+    .from("parlamentar")
+    .select("id")
+    .eq("casa", casa)
+    .eq("id_externo", Number(id))
+    .single();
+
+  if (!parlamentar) notFound();
+
   const { data: despesa } = await supabase
     .from("despesa")
     .select("*")
     .eq("id", Number(despesaId))
+    .eq("parlamentar_id", parlamentar.id)
     .single<Despesa>();
 
   if (!despesa) notFound();

@@ -1,0 +1,36 @@
+name: Ingestão Receita Federal (fornecedores)
+
+on:
+  schedule:
+    - cron: "0 2 1 * *"   # todo dia 1 do mês às 02:00 UTC
+  workflow_dispatch:        # disparo manual
+    inputs:
+      rf_mes:
+        description: "Mês dos arquivos da RF (AAAA-MM). Deixe vazio para usar o mês atual."
+        required: false
+        default: ""
+
+jobs:
+  receita:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      RF_TOKEN: ${{ secrets.RF_TOKEN }}
+      RF_MES: ${{ github.event.inputs.rf_mes || '' }}
+      PYTHONIOENCODING: "utf-8"
+      PYTHONUTF8: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: ingestao/requirements.txt
+
+      - name: Instalar dependências
+        run: pip install -r ingestao/requirements.txt
+
+      - name: Receita Federal — fornecedores e sócios
+        run: python ingestao/scripts/ingestao_fornecedores.py

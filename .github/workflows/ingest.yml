@@ -28,13 +28,27 @@ jobs:
         run: pip install -r ingestao/requirements.txt
 
       - name: Câmara — deputados e proposições
+        id: camara_leg
         run: python ingestao/scripts/ingestao_legislativa.py
 
       - name: Senado — senadores e proposições
+        id: senado_leg
         run: python ingestao/scripts/ingestao_senadores.py
 
       - name: Câmara — despesas CEAP
+        id: camara_ceap
+        continue-on-error: true
         run: python ingestao/scripts/ingestao_despesas.py
 
       - name: Senado — despesas CEAP
+        id: senado_ceap
+        continue-on-error: true
         run: python ingestao/scripts/ingestao_despesas_senadores.py
+
+      - name: Sumário
+        if: always()
+        run: |
+          echo "camara_leg   : ${{ steps.camara_leg.outcome }}"
+          echo "senado_leg   : ${{ steps.senado_leg.outcome }}"
+          echo "camara_ceap  : ${{ steps.camara_ceap.outcome }}"
+          echo "senado_ceap  : ${{ steps.senado_ceap.outcome }}"
