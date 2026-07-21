@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { supabase } from "@/lib/db";
+import AvatarFoto from "@/components/AvatarFoto";
 import type { Parlamentar } from "@/types";
 
 export const revalidate = 86400;
@@ -291,15 +292,14 @@ export default async function GastosPage({ searchParams }: Props) {
 
                     {/* Avatar + nome */}
                     <div className="flex items-center gap-3">
-                      <div
-                        className={`w-[38px] h-[38px] rounded-lg font-extrabold text-[13px] flex items-center justify-center shrink-0 ${
-                          isPrimeiro
-                            ? "bg-brand-blue text-white"
-                            : "bg-blue-bg text-brand-blue"
-                        }`}
-                      >
-                        {iniciais(p.nome)}
-                      </div>
+                      <AvatarFoto
+                        url={p.foto_url}
+                        iniciais={iniciais(p.nome)}
+                        size={38}
+                        rounded="rounded-lg"
+                        avatarBg={isPrimeiro ? "#1351B4" : "#e8f0fb"}
+                        avatarText={isPrimeiro ? "#ffffff" : "#1351B4"}
+                      />
                       <span className="font-bold text-sm text-text-strong truncate">
                         {p.nome}
                       </span>

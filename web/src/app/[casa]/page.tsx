@@ -292,6 +292,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
                 situacao={p.situacao}
                 iniciais={iniciais(p.nome)}
                 href={`/${casa}/${p.id_externo}`}
+                fotoUrl={p.foto_url}
               />
             ))}
           </div>

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { supabase } from "@/lib/db";
 import GastosChart, { type GastoItem } from "@/components/GastosChart";
+import AvatarFoto from "@/components/AvatarFoto";
 import type { Parlamentar, Proposicao } from "@/types";
 
 export const revalidate = 3600;
@@ -186,9 +187,13 @@ export default async function DetalhePage({ params }: Props) {
       {/* Header do perfil */}
       <div className="max-w-[1180px] mx-auto px-8 pt-9">
         <div className="flex gap-7 items-start">
-          <div className="w-[110px] h-[110px] rounded-2xl bg-blue-bg border border-border-input flex items-center justify-center text-brand-blue font-extrabold text-[34px] shrink-0 select-none">
-            {iniciais(parlamentar.nome)}
-          </div>
+          <AvatarFoto
+            url={parlamentar.foto_url}
+            iniciais={iniciais(parlamentar.nome)}
+            size={110}
+            rounded="rounded-2xl"
+            fontSize={34}
+          />
 
           <div className="flex-1">
             <div className="flex items-center gap-3 flex-wrap">

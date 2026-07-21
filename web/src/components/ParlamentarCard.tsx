@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AvatarFoto from "./AvatarFoto";
 
 type CfgStatus = {
   faixa: string;
@@ -61,6 +62,7 @@ export type ParlamentarCardProps = {
   situacao: string | null | undefined;
   iniciais: string;
   href: string;
+  fotoUrl?: string | null;
 };
 
 export default function ParlamentarCard({
@@ -72,6 +74,7 @@ export default function ParlamentarCard({
   situacao,
   iniciais,
   href,
+  fotoUrl,
 }: ParlamentarCardProps) {
   const cfg = resolveCfg(situacao);
   const gastoStr = fmtGasto(gasto2025);
@@ -89,12 +92,14 @@ export default function ParlamentarCard({
       <div className="p-[22px]">
         {/* Avatar + nome */}
         <div className="flex items-center gap-3 mb-4">
-          <div
-            className="w-14 h-14 rounded-xl flex items-center justify-center font-extrabold text-lg shrink-0 select-none"
-            style={{ backgroundColor: cfg.avatarBg, color: cfg.avatarText }}
-          >
-            {iniciais}
-          </div>
+          <AvatarFoto
+            url={fotoUrl}
+            iniciais={iniciais}
+            size={56}
+            rounded="rounded-xl"
+            avatarBg={cfg.avatarBg}
+            avatarText={cfg.avatarText}
+          />
           <div className="min-w-0">
             <p className="text-[16px] font-extrabold text-text-strong leading-tight line-clamp-2">
               {nome}
