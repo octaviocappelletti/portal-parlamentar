@@ -83,21 +83,20 @@ export default async function GastosPage({ searchParams }: Props) {
   const page = Math.max(1, parseInt(pagina, 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Queries paralelas
-  let baseQ = supabase.from("parlamentar").select("*", { count: "exact" }).eq("casa", casa);
-  if (situacao) baseQ = baseQ.eq("situacao", situacao);
-  if (q)        baseQ = baseQ.ilike("nome", `%${q}%`);
-  if (uf)       baseQ = baseQ.eq("uf", uf);
-  if (partido)  baseQ = baseQ.eq("partido", partido);
+  // Passo 1: busca TODOS os parlamentares que batem com os filtros (apenas campos necessários)
+  let idQ = supabase
+    .from("parlamentar")
+    .select("id, id_externo, nome, partido, uf, situacao, foto_url")
+    .eq("casa", casa);
+  if (situacao) idQ = idQ.eq("situacao", situacao);
+  if (q)        idQ = idQ.ilike("nome", `%${q}%`);
+  if (uf)       idQ = idQ.eq("uf", uf);
+  if (partido)  idQ = idQ.eq("partido", partido);
 
-  const [{ data: rawList, count }, { data: partidosData }] = await Promise.all([
-    baseQ.order("nome").range(offset, offset + PAGE_SIZE - 1),
+  const [{ data: allParl }, { data: partidosData }] = await Promise.all([
+    idQ,
     supabase.from("parlamentar").select("partido").eq("casa", casa).not("partido", "is", null),
   ]);
-
-  const parlamentares = (rawList ?? []) as Parlamentar[];
-  const total = count ?? 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
 
   const partidos = [
     ...new Set(
@@ -107,13 +106,13 @@ export default async function GastosPage({ searchParams }: Props) {
     ),
   ].sort() as string[];
 
-  // Totais de gasto desta página
-  const ids = parlamentares.map((p) => p.id);
-  const { data: totaisData } = ids.length
+  // Passo 2: busca totais de gasto para esses parlamentares no ano selecionado
+  const allIds = (allParl ?? []).map((p: { id: number }) => p.id);
+  const { data: totaisData } = allIds.length
     ? await supabase
         .from("despesa_resumo_ano")
         .select("parlamentar_id, total")
-        .in("parlamentar_id", ids)
+        .in("parlamentar_id", allIds)
         .eq("ano", parseInt(ano, 10))
     : { data: [] };
 
@@ -124,11 +123,15 @@ export default async function GastosPage({ searchParams }: Props) {
     ]),
   );
 
-  const sorted = [...parlamentares].sort(
+  // Passo 3: ordena globalmente por gasto DESC e pagina em JS
+  const allSorted = [...(allParl ?? [])].sort(
     (a, b) => (totaisMap.get(b.id) ?? 0) - (totaisMap.get(a.id) ?? 0),
-  );
+  ) as Parlamentar[];
 
-  const maxTotal = Math.max(...sorted.map((p) => totaisMap.get(p.id) ?? 0), 1);
+  const total = allSorted.length;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const sorted = allSorted.slice(offset, offset + PAGE_SIZE);
+  const maxTotal = Math.max(totaisMap.get(allSorted[0]?.id) ?? 0, 1);
 
   const sp: SP = { casa, q, uf, partido, ano, pagina };
   const camaraUrl = buildUrl(sp, { casa: "camara", pagina: "1" });
@@ -269,7 +272,7 @@ export default async function GastosPage({ searchParams }: Props) {
                 const pos = offset + i + 1;
                 const gasto = totaisMap.get(p.id);
                 const pct = gasto ? Math.round((gasto / maxTotal) * 100) : 0;
-                const cor = gasto ? corPosicao(i + 1, sorted.length) : "#eef2f7";
+                const cor = gasto ? corPosicao(pos, total) : "#eef2f7";
                 const isPrimeiro = i === 0 && page === 1;
 
                 return (

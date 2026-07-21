@@ -1,9 +1,3 @@
-"use client";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip,
-  ResponsiveContainer, Cell,
-} from "recharts";
-
 const BRL = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
@@ -15,46 +9,34 @@ export type GastoItem = { label: string; total: number; cor: string };
 export default function GastosChart({ data }: { data: GastoItem[] }) {
   if (!data.length) return null;
 
-  const height = Math.max(data.length * 48, 120);
+  const maxTotal = Math.max(...data.map((d) => d.total), 1);
 
   return (
-    <ResponsiveContainer width="100%" height={height}>
-      <BarChart
-        layout="vertical"
-        data={data}
-        margin={{ top: 0, right: 8, left: 0, bottom: 0 }}
-        barCategoryGap="30%"
-      >
-        <XAxis type="number" hide />
-        <YAxis
-          type="category"
-          dataKey="label"
-          width={185}
-          tick={{ fontSize: 13, fill: "#54606e", fontWeight: 600 }}
-          tickLine={false}
-          axisLine={false}
-        />
-        <Tooltip
-          cursor={{ fill: "#eef2f7" }}
-          formatter={(value) => [BRL.format(Number(value)), "Total"]}
-          labelStyle={{ color: "#1c2733", fontWeight: 700, fontSize: 13 }}
-          contentStyle={{
-            border: "1px solid #e4e9f0",
-            borderRadius: 8,
-            fontSize: 13,
-            padding: "6px 12px",
-          }}
-        />
-        <Bar
-          dataKey="total"
-          radius={[0, 4, 4, 0]}
-          background={{ fill: "#eef2f7", radius: 4 } as object}
-        >
-          {data.map((entry, i) => (
-            <Cell key={i} fill={entry.cor} />
-          ))}
-        </Bar>
-      </BarChart>
-    </ResponsiveContainer>
+    <div className="flex flex-col gap-2 max-w-[460px]">
+      {data.map((item, i) => {
+        const pct = Math.round((item.total / maxTotal) * 100);
+        return (
+          <div key={i}>
+            <div className="flex items-center justify-between mb-1">
+              <span
+                className="text-[11px] text-text-body font-semibold truncate mr-3"
+                title={item.label}
+              >
+                {item.label}
+              </span>
+              <span className="font-extrabold text-[18px] text-brand-blue-dark shrink-0">
+                {BRL.format(item.total)}
+              </span>
+            </div>
+            <div className="h-[5px] bg-track rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full"
+                style={{ width: `${pct}%`, backgroundColor: item.cor }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
