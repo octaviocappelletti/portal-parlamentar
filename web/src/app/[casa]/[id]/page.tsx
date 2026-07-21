@@ -1,35 +1,18 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { Metadata } from "next";
 import { supabase } from "@/lib/db";
 import GastosChart, { type GastoItem } from "@/components/GastosChart";
-import AvatarFoto from "@/components/AvatarFoto";
 import type { Parlamentar, Proposicao } from "@/types";
 
 export const revalidate = 3600;
 
-const CASAS = {
-  camara: { label: "Deputados", cargo: "Deputado(a) Federal" },
-  senado: { label: "Senadores", cargo: "Senador(a)" },
-} as const;
-
-type Casa = keyof typeof CASAS;
-
-const TABS = ["Visão geral", "Gastos", "Proposições", "Votações", "Patrimônio"] as const;
+const CORES_GASTO = ["#1351B4", "#1351B4", "#168821", "#168821", "#FFCD07"];
 
 const STATUS_BADGE: Record<string, string> = {
   Aprovado:        "bg-green-bg text-brand-green",
   "Em tramitação": "bg-yellow-bg text-yellow-text",
   Arquivado:       "bg-surface-alt text-text-body",
 };
-
-const CORES_GASTO = ["#1351B4", "#1351B4", "#168821", "#168821", "#FFCD07"];
-
-function iniciais(nome: string): string {
-  const parts = nome.trim().split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
 
 function formatGastoKPI(value: number): string {
   if (value >= 1_000_000)
@@ -61,30 +44,15 @@ type Props = {
   params: Promise<{ casa: string; id: string }>;
 };
 
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { casa, id } = await params;
-  const { data } = await supabase
-    .from("parlamentar")
-    .select("nome")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single();
-  return { title: (data as { nome?: string } | null)?.nome ?? "Parlamentar" };
-}
-
 export default async function DetalhePage({ params }: Props) {
   const { casa, id } = await params;
-  if (!(casa in CASAS)) notFound();
-
-  const casaKey = casa as Casa;
-  const { label, cargo } = CASAS[casaKey];
 
   const { data: parlamentar } = await supabase
     .from("parlamentar")
-    .select("*")
+    .select("id")
     .eq("casa", casa)
     .eq("id_externo", Number(id))
-    .single<Parlamentar>();
+    .single<Pick<Parlamentar, "id">>();
 
   if (!parlamentar) notFound();
 
@@ -172,76 +140,7 @@ export default async function DetalhePage({ params }: Props) {
   }));
 
   return (
-    <div>
-      {/* Breadcrumb */}
-      <div className="bg-surface-alt border-b border-border-base">
-        <div className="max-w-[1180px] mx-auto px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
-          <Link href="/" className="hover:text-text-strong transition-colors">Início</Link>
-          <span>›</span>
-          <Link href={`/${casa}`} className="hover:text-text-strong transition-colors">{label}</Link>
-          <span>›</span>
-          <span className="text-text-strong font-semibold">{parlamentar.nome}</span>
-        </div>
-      </div>
-
-      {/* Header do perfil */}
-      <div className="max-w-[1180px] mx-auto px-8 pt-9">
-        <div className="flex gap-7 items-start">
-          <AvatarFoto
-            url={parlamentar.foto_url}
-            iniciais={iniciais(parlamentar.nome)}
-            size={110}
-            rounded="rounded-2xl"
-            fontSize={34}
-          />
-
-          <div className="flex-1">
-            <div className="flex items-center gap-3 flex-wrap">
-              <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong">
-                {parlamentar.nome}
-              </h1>
-              {parlamentar.situacao && (
-                <span className="rounded-full bg-blue-bg text-brand-blue text-xs font-bold px-3 py-[5px]">
-                  {parlamentar.situacao}
-                </span>
-              )}
-            </div>
-            <p className="text-[15px] text-text-body mt-1.5">
-              {cargo}
-              {parlamentar.partido && <> · <strong>{parlamentar.partido}</strong></>}
-              {parlamentar.uf && <> · {parlamentar.uf}</>}
-            </p>
-          </div>
-
-          <div className="flex flex-col gap-2.5 shrink-0">
-            <button className="bg-brand-blue text-white px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-[#0d3d96] transition-colors">
-              Criar alerta
-            </button>
-            <button className="border border-border-input text-[#33404f] px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-surface-alt transition-colors">
-              Baixar dados
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="max-w-[1180px] mx-auto px-8 mt-6">
-        <div className="flex border-b border-border-base">
-          {TABS.map((tab) => (
-            <span
-              key={tab}
-              className={`px-5 py-[14px] text-sm select-none ${
-                tab === "Visão geral"
-                  ? "text-brand-blue font-bold border-b-[3px] border-brand-blue -mb-px"
-                  : "text-text-body font-semibold cursor-pointer hover:text-text-strong"
-              }`}
-            >
-              {tab}
-            </span>
-          ))}
-        </div>
-      </div>
-
+    <>
       {/* KPIs */}
       <div className="border-b border-border-base">
         <div className="max-w-[1180px] mx-auto grid grid-cols-2 sm:grid-cols-4">
@@ -266,7 +165,7 @@ export default async function DetalhePage({ params }: Props) {
 
       {/* Corpo — 2 colunas */}
       <div className="max-w-[1180px] mx-auto px-8 py-8 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8">
-        {/* Gastos por categoria — Recharts */}
+        {/* Gastos por categoria */}
         <div>
           <h2 className="text-[18px] font-extrabold text-text-strong mb-4">
             Gastos por categoria
@@ -275,10 +174,10 @@ export default async function DetalhePage({ params }: Props) {
             <>
               <GastosChart data={gastosChart} />
               <Link
-                href={`/${casa}/${id}/despesas`}
+                href={`/${casa}/${id}/gastos`}
                 className="block mt-3.5 text-[13px] text-brand-blue font-bold hover:underline"
               >
-                Ver todas as notas fiscais →
+                Ver todos os gastos →
               </Link>
             </>
           ) : (
@@ -294,21 +193,29 @@ export default async function DetalhePage({ params }: Props) {
             Proposições recentes
           </h2>
           {propsExibidas.length > 0 ? (
-            <div className="flex flex-col gap-3">
-              {propsExibidas.map(({ titulo, status, data }) => (
-                <div key={titulo} className="border border-border-base rounded-[10px] p-4">
-                  <div className="flex items-center gap-2 mb-1.5">
-                    <span
-                      className={`text-[11px] font-bold px-[9px] py-1 rounded-[6px] ${STATUS_BADGE[status] ?? "bg-surface-alt text-text-body"}`}
-                    >
-                      {status}
-                    </span>
-                    {data && <span className="text-xs text-text-muted">{data}</span>}
+            <>
+              <div className="flex flex-col gap-3">
+                {propsExibidas.map(({ titulo, status, data }) => (
+                  <div key={titulo} className="border border-border-base rounded-[10px] p-4">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span
+                        className={`text-[11px] font-bold px-[9px] py-1 rounded-[6px] ${STATUS_BADGE[status] ?? "bg-surface-alt text-text-body"}`}
+                      >
+                        {status}
+                      </span>
+                      {data && <span className="text-xs text-text-muted">{data}</span>}
+                    </div>
+                    <p className="font-bold text-sm text-text-strong leading-snug">{titulo}</p>
                   </div>
-                  <p className="font-bold text-sm text-text-strong leading-snug">{titulo}</p>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+              <Link
+                href={`/${casa}/${id}/proposicoes`}
+                className="block mt-3.5 text-[13px] text-brand-blue font-bold hover:underline"
+              >
+                Ver todas as proposições →
+              </Link>
+            </>
           ) : (
             <p className="text-sm text-text-muted py-6">
               Nenhuma proposição encontrada.
@@ -316,6 +223,6 @@ export default async function DetalhePage({ params }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 }

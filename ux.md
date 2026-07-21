@@ -100,6 +100,27 @@ Todos ficam em `web/src/components/`.
 - Altura dinâmica: `data.length × 48px` (mínimo 120px)
 - Exporta também o tipo `GastoItem` para uso nas páginas
 
+### `GastosMensaisChart.tsx` (client component — Recharts)
+- `BarChart` vertical com 12 meses fixos no eixo X (Jan–Dez)
+- Prop: `data: { mes: number; total: number }[]` (meses 1–12)
+- Meses sem dado renderizados com `opacity: 0.15` para manter a grade dos 12 meses visível
+- Tooltip em BRL; eixo Y oculto; altura fixa de 200px
+- Usado na aba Gastos do parlamentar
+
+### `ProposicoesAnoChart.tsx` (client component — Recharts)
+- `BarChart` vertical de proposições por ano
+- Prop: `data: { ano: number; total: number }[]`
+- Anos ordenados crescentes; altura fixa de 180px
+- Não renderiza nada se o array estiver vazio (`if (!data.length) return null`)
+- Usado na aba Proposições do parlamentar
+
+### `TabsNav.tsx` (client component)
+- Recebe `basePath: string` (ex.: `/camara/123`) e detecta a aba ativa via `usePathname()`
+- 5 abas: Visão geral, Gastos, Proposições, Votações, Patrimônio
+- Votações e Patrimônio têm `enabled: false` → renderizados como `<span>` com `opacity-50 cursor-default` e title "Em breve" (evita 404)
+- Abas habilitadas são `<Link>` com underline `border-b-[3px] border-brand-blue -mb-px` quando ativas
+- `overflow-x-auto` na div container para scroll horizontal em telas pequenas
+
 ---
 
 ## 4. Layout raiz (`web/src/app/layout.tsx`)
@@ -232,18 +253,35 @@ O bloco exibe `MOCK_GASTOS_HOME` no `GastosChart`. Para conectar dados reais, é
 
 ---
 
-### 5.4 Detalhe — `/[casa]/[id]` (`app/[casa]/[id]/page.tsx`)
+### 5.4 Detalhe — `/[casa]/[id]` — layout compartilhado + aba Visão geral
 
 **Parâmetros de rota:** `casa`, `id` (= `id_externo` do parlamentar)
+
+#### Layout compartilhado (`app/[casa]/[id]/layout.tsx`)
+
+Criado para evitar duplicação do cabeçalho nas três abas implementadas. Envolve todas as rotas sob `/[casa]/[id]/`.
+
+**Responsabilidades do layout:**
+- Busca dados básicos do parlamentar (`SELECT *`) para renderizar breadcrumb + header
+- Renderiza breadcrumb (Início › Deputados/Senadores › nome)
+- Renderiza header do perfil: `AvatarFoto` 110px `rounded-2xl`, nome, badge de situação, cargo + partido + UF, botões "Criar alerta" / "Baixar dados"
+- Renderiza `<TabsNav basePath={basePath} />` (client component)
+- Expõe `{children}` para o conteúdo de cada aba
+
+**`generateMetadata`** foi movido do `page.tsx` para o layout — aplica-se a todas as abas sob `/[casa]/[id]/`.
+
+**`revalidate = 86400`** no layout (dados do parlamentar mudam raramente).
+
+---
+
+#### Aba Visão geral (`app/[casa]/[id]/page.tsx`)
 
 **Seções:**
 
 | Seção | Dados | Status |
 |---|---|---|
-| Breadcrumb | real (nome do parlamentar) | **conectado** |
-| Header do perfil | real (nome, partido, uf, situacao) | **conectado** |
-| Chips de comissões | — | não implementado |
-| Tabs (5 abas) | visual only | estático |
+| Breadcrumb + Header | via layout | **conectado** |
+| Tabs navegáveis | via layout + TabsNav | **conectado** |
 | KPIs (4 células) | parcialmente real | ver tabela abaixo |
 | Gastos por categoria | Supabase + Recharts | **conectado** |
 | Proposições recentes | Supabase (3 mais recentes) | **conectado** |
@@ -267,9 +305,114 @@ O bloco exibe `MOCK_GASTOS_HOME` no `GastosChart`. Para conectar dados reais, é
 - Query: `proposicao WHERE parlamentar_id=X ORDER BY data_apresentacao DESC LIMIT 3`
 - Status mapeado: `aprovada=true` → "Aprovado"; regex `/arquiv/i` → "Arquivado"; resto → "Em tramitação"
 - Badge colorido por status via `STATUS_BADGE` map
+- Link "Ver todas as proposições →" → `/[casa]/[id]/proposicoes`
+- Link "Ver todos os gastos →" → `/[casa]/[id]/gastos` (substituiu o antigo link `/despesas`)
 
-**generateMetadata:** consulta nome do parlamentar no Supabase para title dinâmico.  
-**notFound():** chamado se `casa` inválida ou `id_externo` não encontrado.  
+**notFound():** chamado se `id_externo` não encontrado (casa já validada no layout).  
+**`revalidate = 3600`** — ISR 1 hora.
+
+---
+
+### 5.6 Aba Gastos do parlamentar — `/[casa]/[id]/gastos`
+
+**SearchParams:** `ano`, `mes`, `natureza`, `pagina`
+
+**Seções:**
+
+| Seção | Dados | Status |
+|---|---|---|
+| KPIs (4 células) — totais anuais | Supabase real | **conectado** |
+| Gráfico mensal (`GastosMensaisChart`) | Supabase real | **conectado** |
+| Top 5 categorias (`GastosChart`) | Supabase real | **conectado** |
+| Filtros (ano, mês, tipo) | form GET | **conectado** |
+| Tabela paginada de lançamentos | Supabase real | **conectado** |
+
+**Estratégia de queries (2 paralelas):**
+
+1. **Dados de gráfico** — `SELECT mes, natureza, valor_liquido FROM despesa WHERE parlamentar_id=X AND ano=?` sem filtro de mes/natureza (`.limit(500)`) → usados para KPIs, gráfico mensal e top 5 categorias. KPIs sempre refletem o ano inteiro.
+2. **Dados da tabela** — `SELECT * FROM despesa WHERE ... AND [mes=?] [AND natureza=?]` com `count: "exact"` + `.range(offset, offset+29)` → tabela paginada responde aos filtros de mes e natureza.
+
+> O gráfico e os KPIs refletem apenas o filtro de `ano`; o filtro de `mes` e `natureza` só afeta a tabela. Assim o usuário vê o panorama completo do ano enquanto navega lançamentos específicos.
+
+**KPIs (calculados em JS do query 1):**
+
+| KPI | Cálculo |
+|---|---|
+| Total gasto | `SUM(valor_liquido)` |
+| Lançamentos | `COUNT(*)` |
+| Maior despesa | `MAX(valor_liquido)` |
+| Meses com gasto | `COUNT(DISTINCT mes)` exibido como "N de 12" |
+
+**Gráfico mensal:**
+- 12 meses fixos no eixo X; meses sem dado aparecem como barra quase transparente
+- Agrupamento: `Record<mes, SUM(valor_liquido)>` em JS
+
+**Top 5 categorias:**
+- Agrupamento por `natureza` em JS → top 5 por valor DESC
+- Reutiliza `GastosChart` (barras horizontais)
+- Cores: posições 0–1 azul `#1351B4`, 2–3 azul mais claro `#2563eb` / verde `#168821`, 4 verde escuro
+
+**Tabela de lançamentos:**
+- Grid `70px 1.5fr 1.8fr 110px 44px` (Mês | Tipo | Fornecedor | Valor | Doc)
+- Fornecedor: se `cpf_cnpj` tem 14 dígitos (CNPJ) → `<Link href="/fornecedor/[cnpj]">` em azul; caso contrário texto simples
+- Valor glosa exibida como `text-danger` abaixo do valor líquido se `valor_glosa > 0`
+- Ícone de link externo se `url_documento` presente
+- `PAGE_SIZE = 30`; paginação com janela de 3 botões
+
+**`revalidate = 3600`** — ISR 1 hora.
+
+---
+
+### 5.7 Aba Proposições do parlamentar — `/[casa]/[id]/proposicoes`
+
+**SearchParams:** `tipo`, `status`, `ano`, `pagina`
+
+**Seções:**
+
+| Seção | Dados | Status |
+|---|---|---|
+| KPIs (4 células) — totais globais | Supabase real | **conectado** |
+| Gráfico por ano (`ProposicoesAnoChart`) | Supabase real | **conectado** |
+| Filtros (tipo, status, ano) | form GET | **conectado** |
+| Lista paginada de cards | Supabase real | **conectado** |
+
+**Estratégia de queries (2 paralelas):**
+
+1. **Dados leves** — `SELECT ano, tipo, aprovada, situacao, autor_principal FROM proposicao WHERE parlamentar_id=X LIMIT 2000` → KPIs globais e gráfico por ano. Sempre sem filtros para mostrar o panorama total do parlamentar.
+2. **Lista paginada** — `SELECT * FROM proposicao WHERE parlamentar_id=X [AND tipo=?] [AND ano=?] [AND status=?]` com `count: "exact"` + `.range(offset, offset+19)` → lista filtrada.
+
+**KPIs (calculados em JS do query 1, sempre globais):**
+
+| KPI | Cálculo | Cor |
+|---|---|---|
+| Proposições | total | `#071d41` |
+| Aprovadas | `aprovada = true` | `#168821` (verde) |
+| Em tramitação | `!aprovada AND situacao !~ /arquiv/i` | `#1351B4` (azul) |
+| Arquivadas | `situacao =~ /arquiv/i` | `#54606e` (cinza) |
+
+**Gráfico por ano:**
+- Renderizado apenas se `anoItems.length > 1` (oculto para parlamentares com proposições em apenas um ano)
+- Limitado a `max-w-[680px]` para não ocupar largura excessiva
+
+**Filtro de status no banco (query 2):**
+```tsx
+// aprovadas:
+tableQ.eq("aprovada", true)
+// arquivadas:
+tableQ.ilike("situacao", "%arquiv%")
+// tramitacao:
+tableQ.eq("aprovada", false).or("situacao.is.null,situacao.not.ilike.%arquiv%")
+```
+Mesmo padrão do `/proposicoes` global — o `.or()` inclui linhas com `situacao = null`.
+
+**Card de proposição:**
+- Badge de status com cores customizadas via `style={{ backgroundColor, color }}`
+- Badge "Coautor" (cinza) quando `autor_principal === false`
+- Identificação (`PL 1234/2025`) alinhada à direita com `ml-auto`
+- Ementa com `line-clamp-2`
+- Link "Ver íntegra" com ícone externo abre `url_inteiro_teor` em nova aba quando disponível
+- `PAGE_SIZE = 20`; paginação com janela de 3 botões
+
 **`revalidate = 3600`** — ISR 1 hora.
 
 ---
@@ -363,19 +506,23 @@ O `.or()` inclui proposições com `situacao = null` (NULL NOT ILIKE retorna NUL
 - [ ] Tabela `presenca` populada → KPI "Presença" no detalhe
 
 ### Rotas não implementadas
-- [ ] `/[casa]/[id]/despesas/[despesaId]` — detalhe da despesa (derivar do card de despesa)
-- [ ] `/[casa]/[id]/projetos/[proposicaoId]` — íntegra da proposição
-- [ ] `/fornecedor/[cnpj]` — página do fornecedor (reusar layout de detalhe + tabela da lista)
+- [ ] `/[casa]/[id]/despesas/[despesaId]` — detalhe de uma despesa específica
+- [ ] `/[casa]/[id]/projetos/[proposicaoId]` — íntegra da proposição (interno)
 - [ ] `/sobre` — página institucional (nav aponta para cá, retorna 404)
+- [ ] `/[casa]/[id]/votacoes` — tab Votações (sem fonte de dados ainda — §6.4/§6.17)
+- [ ] `/[casa]/[id]/patrimonio` — tab Patrimônio (sem fonte de dados ainda)
 
-### Rotas implementadas (esta sessão)
-- [x] `/[casa]` — reescrito como grade de cards (tela 3a) com `ParlamentarCard`
-- [x] `/gastos` — novo, tabela de ranking (tela 2b) com toggle de casa via query param
-- [x] `/proposicoes` — novo, lista de proposições com filtros completos
+### Rotas implementadas
+- [x] `/[casa]` — grade de cards (tela 3a) com `ParlamentarCard`
+- [x] `/gastos` — tabela de ranking (tela 2b) com toggle de casa via query param
+- [x] `/proposicoes` — lista global de proposições com filtros completos
+- [x] `/[casa]/[id]` — layout compartilhado (`layout.tsx`) + aba Visão geral
+- [x] `/[casa]/[id]/gastos` — aba Gastos: KPIs anuais, gráfico mensal, top categorias, tabela paginada
+- [x] `/[casa]/[id]/proposicoes` — aba Proposições: KPIs, gráfico por ano, lista filtrada com coautoria
 
 ### UX pendente
-- [ ] Comissões no perfil do parlamentar (não há campo na tabela atual — adicionar à ingestão ou usar campo livre)
-- [ ] Tabs do detalhe com conteúdo real (Gastos, Proposições, Votações, Patrimônio)
+- [ ] Comissões no perfil do parlamentar (sem campo na tabela atual)
+- [ ] Tabs Votações e Patrimônio (aparecem como disabled em `TabsNav` até haver fonte de dados)
 - [ ] Responsivo mobile: tabela `/[casa]` → cards empilhados; nav → hambúrguer
 - [ ] Loading skeletons com trilho `bg-track` (enquanto ISR revalida)
 - [ ] Botão "Criar alerta" → modal/auth Supabase
@@ -400,18 +547,27 @@ web/
 │   │   ├── [casa]/
 │   │   │   ├── page.tsx            ← Diretório (tela 3a) — grade de ParlamentarCard + Carregar mais
 │   │   │   └── [id]/
-│   │   │       └── page.tsx        ← Detalhe (tela 2a) — Supabase + Recharts
+│   │   │       ├── layout.tsx      ← NEW — cabeçalho + TabsNav compartilhados entre abas
+│   │   │       ├── page.tsx        ← Aba Visão geral — KPIs + gastos chart + proposições recentes
+│   │   │       ├── gastos/
+│   │   │       │   └── page.tsx    ← NEW — Aba Gastos — KPIs anuais + gráfico mensal + tabela
+│   │   │       └── proposicoes/
+│   │   │           └── page.tsx    ← NEW — Aba Proposições — KPIs + gráfico por ano + lista
 │   │   ├── gastos/
-│   │   │   └── page.tsx            ← NEW — Ranking (tela 2b) — tabela + toggle casa + paginação
+│   │   │   └── page.tsx            ← Ranking global (tela 2b) — tabela + toggle casa + paginação
 │   │   └── proposicoes/
-│   │       └── page.tsx            ← NEW — Proposições — filtros completos + 2-query pattern
+│   │       └── page.tsx            ← Proposições globais — filtros completos + 2-query pattern
 │   ├── components/
 │   │   ├── GovBar.tsx              ← barra gov.br
 │   │   ├── SiteHeader.tsx          ← header com borda amarela (client)
 │   │   ├── SiteFooter.tsx          ← footer azul escuro
 │   │   ├── SearchBar.tsx           ← busca da home (client)
-│   │   ├── GastosChart.tsx         ← gráfico de barras horizontais (client — Recharts)
-│   │   └── ParlamentarCard.tsx     ← NEW — card da grade /[casa]
+│   │   ├── AvatarFoto.tsx          ← foto com fallback para iniciais (client — next/image)
+│   │   ├── GastosChart.tsx         ← barras horizontais por categoria (client — Recharts)
+│   │   ├── GastosMensaisChart.tsx  ← NEW — barras verticais por mês (client — Recharts)
+│   │   ├── ProposicoesAnoChart.tsx ← NEW — barras por ano (client — Recharts)
+│   │   ├── ParlamentarCard.tsx     ← card da grade /[casa] com AvatarFoto
+│   │   └── TabsNav.tsx             ← NEW — abas navegáveis com usePathname (client)
 │   └── lib/
 │       └── mock.ts                 ← MOCK_GASTOS_HOME (ainda em uso na home)
 ```

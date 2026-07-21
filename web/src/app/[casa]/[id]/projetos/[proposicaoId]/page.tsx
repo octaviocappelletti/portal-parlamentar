@@ -1,6 +1,5 @@
 import { supabase } from "@/lib/db";
 import type { Proposicao } from "@/types";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export const revalidate = 86400;
@@ -14,98 +13,86 @@ const LABELS_CASA: Record<string, string> = {
   senado: "Senado Federal",
 };
 
-const SITUACAO_LABEL: Record<string, string> = {
-  aprovada: "Aprovada",
-  arquivada: "Arquivada",
-  "em tramitacao": "Em tramitação",
+const STATUS_BADGE: Record<string, { bg: string; text: string }> = {
+  "Aprovado":       { bg: "#e7f4ea", text: "#168821" },
+  "Em tramitação":  { bg: "#fef9e7", text: "#7d5a00" },
+  "Arquivado":      { bg: "#eef2f7", text: "#54606e" },
 };
 
-export default async function ProposicaoPage({ params }: Props) {
-  const { casa, id, proposicaoId } = await params;
+function resolveStatus(p: Proposicao): string {
+  if (p.aprovada) return "Aprovado";
+  if (/arquiv/i.test(p.situacao ?? "")) return "Arquivado";
+  return "Em tramitação";
+}
 
-  const [{ data: parlamentar }, { data: proposicao }] = await Promise.all([
-    supabase
-      .from("parlamentar")
-      .select("nome")
-      .eq("casa", casa)
-      .eq("id_externo", Number(id))
-      .single(),
-    supabase
-      .from("proposicao")
-      .select("*")
-      .eq("id", Number(proposicaoId))
-      .single<Proposicao>(),
-  ]);
+export default async function ProposicaoPage({ params }: Props) {
+  const { casa, proposicaoId } = await params;
+
+  const { data: proposicao } = await supabase
+    .from("proposicao")
+    .select("*")
+    .eq("id", Number(proposicaoId))
+    .single<Proposicao>();
 
   if (!proposicao) notFound();
 
-  return (
-    <main className="max-w-3xl mx-auto px-6 py-8">
-      <nav aria-label="Localização" className="text-sm text-slate-500 mb-6 flex items-center gap-2">
-        <Link href="/" className="hover:text-slate-700 transition-colors">Início</Link>
-        <span>/</span>
-        <Link href={`/${casa}`} className="hover:text-slate-700 transition-colors">{LABELS_CASA[casa] ?? casa}</Link>
-        <span>/</span>
-        <Link href={`/${casa}/${id}`} className="hover:text-slate-700 transition-colors">
-          {parlamentar?.nome ?? "Parlamentar"}
-        </Link>
-        <span>/</span>
-        <span className="text-slate-700 font-medium">
-          {proposicao.tipo} {proposicao.numero}/{proposicao.ano}
-        </span>
-      </nav>
+  const statusStr = resolveStatus(proposicao);
+  const badge = STATUS_BADGE[statusStr] ?? { bg: "#eef2f7", text: "#54606e" };
 
-      <div className="card p-6 mb-5">
-        <div className="flex flex-wrap gap-2 items-center mb-3">
-          <span className="font-mono text-lg font-bold text-slate-900">
-            {proposicao.tipo} {proposicao.numero}/{proposicao.ano}
-          </span>
-          {proposicao.situacao && (
-            <span
-              className={`badge ${
-                proposicao.aprovada
-                  ? "badge-green"
-                  : proposicao.situacao === "arquivada"
-                  ? "badge-gray"
-                  : "badge-yellow"
-              }`}
-            >
-              {SITUACAO_LABEL[proposicao.situacao] ?? proposicao.situacao}
+  return (
+    <div className="max-w-[1180px] mx-auto px-8 py-8">
+      <div className="max-w-3xl">
+        <div className="border border-border-base rounded-xl p-6 mb-5">
+          <div className="flex flex-wrap gap-2 items-center mb-3">
+            <span className="font-bold text-lg text-text-strong">
+              {proposicao.tipo} {proposicao.numero}/{proposicao.ano}
             </span>
-          )}
-          {proposicao.autor_principal === false && (
-            <span className="badge badge-gray">Não é 1º autor</span>
+            <span
+              className="text-[11px] font-bold px-[9px] py-1 rounded-[6px]"
+              style={{ backgroundColor: badge.bg, color: badge.text }}
+            >
+              {statusStr}
+            </span>
+            {proposicao.autor_principal === false && (
+              <span className="text-[11px] font-bold px-[9px] py-1 rounded-[6px] bg-surface-alt text-text-muted">
+                Coautor
+              </span>
+            )}
+          </div>
+
+          {proposicao.ementa && (
+            <p className="text-text-body leading-relaxed">{proposicao.ementa}</p>
           )}
         </div>
 
-        {proposicao.ementa && (
-          <p className="text-slate-700 leading-relaxed">{proposicao.ementa}</p>
-        )}
-      </div>
+        <div className="flex flex-wrap gap-4 items-center">
+          {proposicao.data_apresentacao && (
+            <p className="text-sm text-text-muted">
+              Apresentada em{" "}
+              <span className="text-text-strong font-semibold">
+                {new Date(proposicao.data_apresentacao).toLocaleDateString("pt-BR")}
+              </span>
+            </p>
+          )}
 
-      <div className="flex flex-wrap gap-4 items-center">
-        {proposicao.data_apresentacao && (
-          <p className="text-sm text-slate-500">
-            Apresentada em{" "}
-            <span className="text-slate-700 font-medium">
-              {new Date(proposicao.data_apresentacao).toLocaleDateString("pt-BR")}
-            </span>
-          </p>
-        )}
+          {proposicao.url_inteiro_teor ? (
+            <a
+              href={proposicao.url_inteiro_teor}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-[11px] bg-brand-blue text-white rounded-lg hover:bg-[#0d3d96] text-sm font-bold transition-colors"
+            >
+              Ver íntegra (fonte oficial) ↗
+            </a>
+          ) : (
+            <p className="text-sm text-text-muted">Íntegra não disponível.</p>
+          )}
+        </div>
 
-        {proposicao.url_inteiro_teor ? (
-          <a
-            href={proposicao.url_inteiro_teor}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-marinho-700 text-white rounded-lg hover:bg-marinho-800 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-marinho-600 focus-visible:ring-offset-2"
-          >
-            Ver íntegra (fonte oficial) ↗
-          </a>
-        ) : (
-          <p className="text-sm text-slate-500">Íntegra não disponível.</p>
-        )}
+        <p className="text-xs text-text-muted mt-8">
+          {LABELS_CASA[casa] ?? casa} — Fonte oficial.
+        </p>
       </div>
-    </main>
+    </div>
   );
 }
