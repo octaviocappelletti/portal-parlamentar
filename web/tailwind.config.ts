@@ -4,9 +4,11 @@ const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-raleway)", "system-ui", "sans-serif"],
+      },
       colors: {
-        // Azul marinho — inspired by the flag's navy circle (#002776).
-        // Used as the primary civic accent across the entire UI.
+        // Existing marinho palette (kept for backward compat)
         marinho: {
           50:  "#f0f4fb",
           100: "#dce8f7",
@@ -20,6 +22,24 @@ const config: Config = {
           900: "#001b5a",
           950: "#000f35",
         },
+        // Capivara design tokens
+        "brand-blue":      "#1351B4",
+        "brand-blue-dark": "#071d41",
+        "brand-green":     "#168821",
+        "brand-yellow":    "#FFCD07",
+        "danger":          "#c0392b",
+        "blue-bg":         "#e8f0fb",
+        "green-bg":        "#e7f4ea",
+        "yellow-bg":       "#fdf3cd",
+        "yellow-text":     "#8a6d00",
+        "text-strong":     "#1c2733",
+        "text-body":       "#54606e",
+        "text-muted":      "#7a8798",
+        "border-base":     "#e4e9f0",
+        "border-input":    "#d3dae4",
+        "track":           "#eef2f7",
+        "surface-alt":     "#f4f7fc",
+        "page-bg":         "#e9edf3",
       },
     },
   },
