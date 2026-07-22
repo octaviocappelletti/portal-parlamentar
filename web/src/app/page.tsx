@@ -57,7 +57,7 @@ const COMO_FUNCIONA = [
     titulo: "Encontre o parlamentar",
     texto: "Busque por nome, estado ou partido e acesse o perfil completo.",
     badge: "bg-blue-bg text-brand-blue",
-    href: null,
+    href: "/estados",
   },
   {
     num: "2",
