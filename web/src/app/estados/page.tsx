@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { EstadosMapa, type StateFeature } from "@/components/EstadosMapa";
 
 export const metadata: Metadata = { title: "Explorar por estado" };
-export const revalidate = 86400 * 30; // rebusca a cada 30 dias (bordas não mudam)
+export const revalidate = 2592000; // 30 dias — bordas dos estados não mudam
 
 // ── Projeção equirretangular ────────────────────────────────────────────────
 // Cobre o bounding box do Brasil com 4px de padding.
