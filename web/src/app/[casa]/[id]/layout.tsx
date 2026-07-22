@@ -59,53 +59,76 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
 
   const basePath = `/${casa}/${id}`;
 
+  const badgeEl = parlamentar.situacao ? (
+    <span className="rounded-full bg-blue-bg text-brand-blue text-xs font-bold px-3 py-[5px]">
+      {parlamentar.situacao}
+    </span>
+  ) : null;
+
+  const cargoEl = (
+    <p className="text-text-body">
+      {cargo}
+      {parlamentar.partido && <> · <strong>{parlamentar.partido}</strong></>}
+      {parlamentar.uf && <> · {parlamentar.uf}</>}
+    </p>
+  );
+
   return (
     <div>
       {/* Breadcrumb */}
       <div className="bg-surface-alt border-b border-border-base">
-        <div className="max-w-[1180px] mx-auto px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
+        <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
           <Link href="/" className="hover:text-text-strong transition-colors">Início</Link>
           <span>›</span>
           <Link href={`/${casa}`} className="hover:text-text-strong transition-colors">{label}</Link>
           <span>›</span>
-          <span className="text-text-strong font-semibold">{parlamentar.nome}</span>
+          <span className="text-text-strong font-semibold truncate">{parlamentar.nome}</span>
         </div>
       </div>
 
       {/* Header do perfil */}
-      <div className="max-w-[1180px] mx-auto px-8 pt-9">
-        <div className="flex gap-7 items-start">
-          <AvatarFoto
-            url={parlamentar.foto_url}
-            iniciais={iniciais(parlamentar.nome)}
-            size={110}
-            rounded="rounded-2xl"
-            fontSize={34}
-          />
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-7 sm:pt-9">
+        <div className="flex flex-col sm:flex-row gap-5 sm:gap-7 sm:items-start">
 
-          <div className="flex-1">
+          {/* Mobile: avatar + nome lado a lado; Desktop: avatar isolado (sm:contents dissolve o wrapper) */}
+          <div className="flex items-center gap-4 sm:contents">
+            <AvatarFoto
+              url={parlamentar.foto_url}
+              iniciais={iniciais(parlamentar.nome)}
+              size={110}
+              rounded="rounded-2xl"
+              fontSize={34}
+            />
+
+            {/* Nome visível apenas no mobile (ao lado do avatar) */}
+            <div className="flex-1 sm:hidden">
+              <div className="flex items-center gap-2 flex-wrap mb-1">
+                <h1 className="text-[22px] font-extrabold tracking-tight text-text-strong leading-tight">
+                  {parlamentar.nome}
+                </h1>
+                {badgeEl}
+              </div>
+              <div className="text-[14px]">{cargoEl}</div>
+            </div>
+          </div>
+
+          {/* Nome visível apenas no desktop */}
+          <div className="flex-1 hidden sm:block">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong">
                 {parlamentar.nome}
               </h1>
-              {parlamentar.situacao && (
-                <span className="rounded-full bg-blue-bg text-brand-blue text-xs font-bold px-3 py-[5px]">
-                  {parlamentar.situacao}
-                </span>
-              )}
+              {badgeEl}
             </div>
-            <p className="text-[15px] text-text-body mt-1.5">
-              {cargo}
-              {parlamentar.partido && <> · <strong>{parlamentar.partido}</strong></>}
-              {parlamentar.uf && <> · {parlamentar.uf}</>}
-            </p>
+            <div className="text-[15px] mt-1.5">{cargoEl}</div>
           </div>
 
-          <div className="flex flex-col gap-2.5 shrink-0">
-            <button className="bg-brand-blue text-white px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-[#0d3d96] transition-colors">
+          {/* Botões: linha no mobile, coluna no desktop */}
+          <div className="flex gap-2 sm:flex-col sm:gap-2.5 shrink-0">
+            <button className="flex-1 sm:flex-none bg-brand-blue text-white px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-[#0d3d96] transition-colors">
               Criar alerta
             </button>
-            <button className="border border-border-input text-[#33404f] px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-surface-alt transition-colors">
+            <button className="flex-1 sm:flex-none border border-border-input text-[#33404f] px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-surface-alt transition-colors">
               Baixar dados
             </button>
           </div>
@@ -113,7 +136,7 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
       </div>
 
       {/* Tabs */}
-      <div className="max-w-[1180px] mx-auto px-8 mt-6">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 mt-6">
         <TabsNav basePath={basePath} />
       </div>
 

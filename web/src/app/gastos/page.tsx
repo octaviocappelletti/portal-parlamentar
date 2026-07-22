@@ -148,14 +148,14 @@ export default async function GastosPage({ searchParams }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="bg-surface-alt border-b border-border-base">
-        <div className="max-w-[1180px] mx-auto px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
+        <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
           <Link href="/" className="hover:text-text-strong transition-colors">Início</Link>
           <span>›</span>
           <span className="text-text-strong font-semibold">Ranking de gastos</span>
         </div>
       </div>
 
-      <div className="max-w-[1180px] mx-auto px-8">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8">
         {/* Título */}
         <div className="pt-8 pb-[22px]">
           <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong mb-2">
@@ -258,8 +258,8 @@ export default async function GastosPage({ searchParams }: Props) {
           </p>
         ) : (
           <div className="pb-2">
-            {/* Cabeçalho */}
-            <div className="grid grid-cols-[56px_2.4fr_1fr_1.6fr_90px] gap-4 px-4 py-3 bg-surface-alt rounded-t-lg text-xs font-bold text-text-body uppercase tracking-[0.03em]">
+            {/* Cabeçalho — oculto em mobile */}
+            <div className="hidden sm:grid grid-cols-[56px_2.4fr_1fr_1.6fr_90px] gap-4 px-4 py-3 bg-surface-alt rounded-t-lg text-xs font-bold text-text-body uppercase tracking-[0.03em]">
               <span>#</span>
               <span>Parlamentar</span>
               <span>Partido / UF</span>
@@ -267,7 +267,7 @@ export default async function GastosPage({ searchParams }: Props) {
               <span />
             </div>
 
-            <div className="border border-border-base border-t-0 rounded-b-lg overflow-hidden">
+            <div className="border border-border-base sm:border-t-0 rounded-lg sm:rounded-t-none sm:rounded-b-lg overflow-hidden">
               {sorted.map((p, i) => {
                 const pos = offset + i + 1;
                 const gasto = totaisMap.get(p.id);
@@ -279,62 +279,69 @@ export default async function GastosPage({ searchParams }: Props) {
                   <div
                     key={p.id}
                     className={[
-                      "grid grid-cols-[56px_2.4fr_1fr_1.6fr_90px] gap-4 px-4 py-4 items-center",
                       i < sorted.length - 1 ? "border-b border-track" : "",
                       isPrimeiro ? "bg-surface-alt" : "",
                     ].join(" ")}
                   >
-                    {/* Posição */}
-                    <span
-                      className={`font-extrabold text-sm ${
-                        isPrimeiro ? "text-danger" : "text-text-body"
-                      }`}
-                    >
-                      {pos}
-                    </span>
+                    {/* Layout mobile — card compacto */}
+                    <div className="sm:hidden px-4 py-4">
+                      <div className="flex items-center gap-3">
+                        <span className={`font-extrabold text-sm w-7 shrink-0 ${isPrimeiro ? "text-danger" : "text-text-body"}`}>
+                          {pos}
+                        </span>
+                        <AvatarFoto
+                          url={p.foto_url}
+                          iniciais={iniciais(p.nome)}
+                          size={36}
+                          rounded="rounded-lg"
+                          avatarBg={isPrimeiro ? "#1351B4" : "#e8f0fb"}
+                          avatarText={isPrimeiro ? "#ffffff" : "#1351B4"}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm text-text-strong truncate">{p.nome}</p>
+                          <p className="text-[12px] text-text-body">{p.partido ?? "—"} · {p.uf ?? "—"}</p>
+                        </div>
+                        <Link href={`/${casa}/${p.id_externo}`} className="text-[13px] text-brand-blue font-bold shrink-0">
+                          Ver →
+                        </Link>
+                      </div>
+                      {gasto ? (
+                        <div className="mt-2.5 ml-[58px]">
+                          <div className="font-bold text-sm text-text-strong mb-1">{formatGasto(gasto)}</div>
+                          <div className="h-[6px] bg-track rounded-full overflow-hidden">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cor }} />
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
 
-                    {/* Avatar + nome */}
-                    <div className="flex items-center gap-3">
-                      <AvatarFoto
-                        url={p.foto_url}
-                        iniciais={iniciais(p.nome)}
-                        size={38}
-                        rounded="rounded-lg"
-                        avatarBg={isPrimeiro ? "#1351B4" : "#e8f0fb"}
-                        avatarText={isPrimeiro ? "#ffffff" : "#1351B4"}
-                      />
-                      <span className="font-bold text-sm text-text-strong truncate">
-                        {p.nome}
+                    {/* Layout desktop — grid */}
+                    <div className="hidden sm:grid grid-cols-[56px_2.4fr_1fr_1.6fr_90px] gap-4 px-4 py-4 items-center">
+                      <span className={`font-extrabold text-sm ${isPrimeiro ? "text-danger" : "text-text-body"}`}>
+                        {pos}
                       </span>
-                    </div>
-
-                    {/* Partido / UF */}
-                    <span className="text-[13px] text-text-body">
-                      {p.partido ?? "—"} · {p.uf ?? "—"}
-                    </span>
-
-                    {/* Gasto + mini-barra */}
-                    <div>
-                      <div className="font-bold text-sm text-text-strong mb-1">
-                        {formatGasto(gasto)}
+                      <div className="flex items-center gap-3">
+                        <AvatarFoto
+                          url={p.foto_url}
+                          iniciais={iniciais(p.nome)}
+                          size={38}
+                          rounded="rounded-lg"
+                          avatarBg={isPrimeiro ? "#1351B4" : "#e8f0fb"}
+                          avatarText={isPrimeiro ? "#ffffff" : "#1351B4"}
+                        />
+                        <span className="font-bold text-sm text-text-strong truncate">{p.nome}</span>
                       </div>
-                      <div className="h-[7px] bg-track rounded-full overflow-hidden">
-                        {gasto ? (
-                          <div
-                            className="h-full rounded-full"
-                            style={{ width: `${pct}%`, backgroundColor: cor }}
-                          />
-                        ) : null}
+                      <span className="text-[13px] text-text-body">{p.partido ?? "—"} · {p.uf ?? "—"}</span>
+                      <div>
+                        <div className="font-bold text-sm text-text-strong mb-1">{formatGasto(gasto)}</div>
+                        <div className="h-[7px] bg-track rounded-full overflow-hidden">
+                          {gasto ? <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: cor }} /> : null}
+                        </div>
                       </div>
+                      <Link href={`/${casa}/${p.id_externo}`} className="text-[13px] text-brand-blue font-bold hover:underline">
+                        Ver →
+                      </Link>
                     </div>
-
-                    {/* Ver → */}
-                    <Link
-                      href={`/${casa}/${p.id_externo}`}
-                      className="text-[13px] text-brand-blue font-bold hover:underline"
-                    >
-                      Ver →
-                    </Link>
                   </div>
                 );
               })}

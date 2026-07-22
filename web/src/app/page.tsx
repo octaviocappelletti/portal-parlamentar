@@ -104,7 +104,7 @@ export default async function Home() {
   return (
     <>
       {/* Hero */}
-      <section className="bg-gradient-to-b from-surface-alt to-white px-8 pt-14 pb-12 text-center">
+      <section className="bg-gradient-to-b from-surface-alt to-white px-4 sm:px-8 pt-10 sm:pt-14 pb-10 sm:pb-12 text-center">
         <div className="max-w-[1180px] mx-auto">
           <span className="inline-block rounded-full bg-blue-bg text-brand-blue text-xs font-bold px-3.5 py-[6px] uppercase tracking-[0.04em] mb-5">
             Dados oficiais · Câmara e Senado
@@ -161,7 +161,7 @@ export default async function Home() {
       </div>
 
       {/* Como funciona */}
-      <section className="bg-surface-alt px-8 py-11">
+      <section className="bg-surface-alt px-4 sm:px-8 py-11">
         <div className="max-w-[1180px] mx-auto">
           <h2 className="text-[22px] font-extrabold text-center mb-1.5 text-text-strong">
             Como funciona
@@ -191,7 +191,7 @@ export default async function Home() {
       </section>
 
       {/* Bloco de gastos — Recharts */}
-      <section className="px-8 py-11">
+      <section className="px-4 sm:px-8 py-11">
         <div className="max-w-[1180px] mx-auto grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-10 items-center">
           <div>
             <p className="section-label mb-2">Cota parlamentar</p>

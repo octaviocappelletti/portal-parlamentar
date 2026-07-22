@@ -141,7 +141,7 @@ export default async function GastosParPage({ params, searchParams }: Props) {
       <div className="border-b border-border-base">
         <div className="max-w-[1180px] mx-auto grid grid-cols-2 sm:grid-cols-4">
           {kpis.map(({ label, valor, delta }, i) => (
-            <div key={label} className={`px-[26px] py-6 ${i < 3 ? "sm:border-r border-border-base" : ""}`}>
+            <div key={label} className={`px-4 sm:px-[26px] py-5 sm:py-6 ${i < 3 ? "sm:border-r border-border-base" : ""}`}>
               <div className="text-[13px] text-text-body font-semibold mb-1.5">{label}</div>
               <div className="text-[26px] font-extrabold text-brand-blue-dark">{valor}</div>
               <div className="text-xs font-semibold mt-1 text-text-body">{delta}</div>
@@ -150,7 +150,7 @@ export default async function GastosParPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      <div className="max-w-[1180px] mx-auto px-8 py-8">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-8">
         {totalGasto === 0 ? (
           <p className="py-16 text-center text-text-muted">
             Nenhum gasto registrado para {ano}.
@@ -233,7 +233,8 @@ export default async function GastosParPage({ params, searchParams }: Props) {
 
             {/* Tabela */}
             <div className="border border-border-base rounded-lg overflow-hidden">
-              <div className="grid grid-cols-[70px_1.5fr_1.8fr_110px_44px] gap-4 px-4 py-3 bg-surface-alt text-xs font-bold text-text-body uppercase tracking-[0.03em]">
+              {/* Cabeçalho — oculto em mobile */}
+              <div className="hidden sm:grid grid-cols-[70px_1.5fr_1.8fr_110px_44px] gap-4 px-4 py-3 bg-surface-alt text-xs font-bold text-text-body uppercase tracking-[0.03em]">
                 <span>Mês</span>
                 <span>Tipo de despesa</span>
                 <span>Fornecedor</span>
@@ -247,79 +248,94 @@ export default async function GastosParPage({ params, searchParams }: Props) {
                 </div>
               ) : (
                 <div className="divide-y divide-border-base">
-                  {despesas.map((d, i) => (
-                    <div
-                      key={d.id ?? i}
-                      className="grid grid-cols-[70px_1.5fr_1.8fr_110px_44px] gap-4 px-4 py-3 items-start"
-                    >
-                      {/* Mês */}
-                      <span className="text-[13px] text-text-body font-semibold pt-0.5">
-                        {MESES_FULL[(d.mes ?? 1) - 1]?.slice(0, 3)}
+                  {despesas.map((d, i) => {
+                    const docLink = d.url_documento ? (
+                      <a
+                        href={d.url_documento}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-brand-blue hover:opacity-70 transition-opacity"
+                        title="Ver documento"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                          <polyline points="15 3 21 3 21 9" />
+                          <line x1="10" y1="14" x2="21" y2="3" />
+                        </svg>
+                      </a>
+                    ) : null;
+
+                    const fornecedorEl = isCnpj(d.cpf_cnpj) ? (
+                      <Link
+                        href={`/fornecedor/${(d.cpf_cnpj ?? "").replace(/\D/g, "")}`}
+                        className="text-[13px] text-brand-blue font-semibold hover:underline leading-snug"
+                      >
+                        {d.fornecedor ?? "—"}
+                      </Link>
+                    ) : (
+                      <span className="text-[13px] text-text-strong font-semibold leading-snug">
+                        {d.fornecedor ?? "—"}
                       </span>
+                    );
 
-                      {/* Natureza + detalhamento */}
-                      <div>
-                        <p className="text-[13px] font-semibold text-text-strong leading-snug">
-                          {d.natureza ?? "—"}
-                        </p>
-                        {d.detalhamento && (
-                          <p className="text-[11px] text-text-muted mt-0.5 line-clamp-1">
-                            {d.detalhamento}
-                          </p>
-                        )}
-                      </div>
+                    return (
+                      <div key={d.id ?? i}>
+                        {/* Layout mobile — card */}
+                        <div className="sm:hidden px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[11px] font-bold text-text-muted uppercase">
+                                  {MESES_FULL[(d.mes ?? 1) - 1]?.slice(0, 3)}
+                                </span>
+                                <span className="text-[11px] text-text-muted">·</span>
+                                <p className="text-[13px] font-semibold text-text-strong leading-snug truncate">
+                                  {d.natureza ?? "—"}
+                                </p>
+                              </div>
+                              <div className="mt-1">{fornecedorEl}</div>
+                              {d.detalhamento && (
+                                <p className="text-[11px] text-text-muted mt-0.5 line-clamp-1">{d.detalhamento}</p>
+                              )}
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-[13px] font-bold text-text-strong">
+                                {formatBRL(d.valor_liquido ?? 0)}
+                              </p>
+                              {(d.valor_glosa ?? 0) > 0 && (
+                                <p className="text-[11px] text-danger">glosa: {formatBRL(d.valor_glosa!)}</p>
+                              )}
+                              {docLink && <div className="mt-1 flex justify-end">{docLink}</div>}
+                            </div>
+                          </div>
+                        </div>
 
-                      {/* Fornecedor */}
-                      <div>
-                        {isCnpj(d.cpf_cnpj) ? (
-                          <Link
-                            href={`/fornecedor/${(d.cpf_cnpj ?? "").replace(/\D/g, "")}`}
-                            className="text-[13px] text-brand-blue font-semibold hover:underline leading-snug"
-                          >
-                            {d.fornecedor ?? "—"}
-                          </Link>
-                        ) : (
-                          <span className="text-[13px] text-text-strong font-semibold leading-snug">
-                            {d.fornecedor ?? "—"}
+                        {/* Layout desktop — grid */}
+                        <div className="hidden sm:grid grid-cols-[70px_1.5fr_1.8fr_110px_44px] gap-4 px-4 py-3 items-start">
+                          <span className="text-[13px] text-text-body font-semibold pt-0.5">
+                            {MESES_FULL[(d.mes ?? 1) - 1]?.slice(0, 3)}
                           </span>
-                        )}
-                        {d.cpf_cnpj && (
-                          <p className="text-[11px] text-text-muted mt-0.5">{d.cpf_cnpj}</p>
-                        )}
+                          <div>
+                            <p className="text-[13px] font-semibold text-text-strong leading-snug">{d.natureza ?? "—"}</p>
+                            {d.detalhamento && (
+                              <p className="text-[11px] text-text-muted mt-0.5 line-clamp-1">{d.detalhamento}</p>
+                            )}
+                          </div>
+                          <div>
+                            {fornecedorEl}
+                            {d.cpf_cnpj && <p className="text-[11px] text-text-muted mt-0.5">{d.cpf_cnpj}</p>}
+                          </div>
+                          <div>
+                            <p className="text-[13px] font-bold text-text-strong">{formatBRL(d.valor_liquido ?? 0)}</p>
+                            {(d.valor_glosa ?? 0) > 0 && (
+                              <p className="text-[11px] text-danger mt-0.5">glosa: {formatBRL(d.valor_glosa!)}</p>
+                            )}
+                          </div>
+                          <div className="flex justify-center pt-0.5">{docLink}</div>
+                        </div>
                       </div>
-
-                      {/* Valor + glosa */}
-                      <div>
-                        <p className="text-[13px] font-bold text-text-strong">
-                          {formatBRL(d.valor_liquido ?? 0)}
-                        </p>
-                        {(d.valor_glosa ?? 0) > 0 && (
-                          <p className="text-[11px] text-danger mt-0.5">
-                            glosa: {formatBRL(d.valor_glosa!)}
-                          </p>
-                        )}
-                      </div>
-
-                      {/* Link documento */}
-                      <div className="flex justify-center pt-0.5">
-                        {d.url_documento && (
-                          <a
-                            href={d.url_documento}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-brand-blue hover:opacity-70 transition-opacity"
-                            title="Ver documento"
-                          >
-                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                              <polyline points="15 3 21 3 21 9" />
-                              <line x1="10" y1="14" x2="21" y2="3" />
-                            </svg>
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

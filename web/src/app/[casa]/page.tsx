@@ -147,7 +147,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
     <div>
       {/* Breadcrumb */}
       <div className="bg-surface-alt border-b border-border-base">
-        <div className="max-w-[1180px] mx-auto px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
+        <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-[14px] text-[13px] text-text-muted flex items-center gap-2">
           <Link href="/" className="hover:text-text-strong transition-colors">Início</Link>
           <span>›</span>
           <span className="text-text-strong font-semibold">
@@ -156,7 +156,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
         </div>
       </div>
 
-      <div className="max-w-[1180px] mx-auto px-8">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8">
         {/* Título */}
         <div className="pt-8 pb-[18px]">
           <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong mb-2">
@@ -169,7 +169,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
 
         {/* Toolbar */}
         <form method="GET" action={`/${casa}`} className="flex gap-3 flex-wrap pb-[18px] items-center">
-          {/* Toggle Câmara / Senado — fora do submit, navega diretamente */}
+          {/* Toggle Câmara / Senado */}
           <div className="flex bg-surface-alt border border-border-base rounded-lg p-1 gap-1 shrink-0">
             <Link
               href={camaraUrl}
@@ -194,7 +194,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
           </div>
 
           {/* Busca */}
-          <div className="flex-1 min-w-[220px] flex items-center bg-white border-[1.5px] border-border-input rounded-lg overflow-hidden">
+          <div className="w-full sm:flex-1 sm:min-w-[220px] flex items-center bg-white border-[1.5px] border-border-input rounded-lg overflow-hidden">
             <input
               type="text"
               name="q"
@@ -214,43 +214,43 @@ export default async function ListaPage({ params, searchParams }: Props) {
             </button>
           </div>
 
-          {/* UF */}
-          <select
-            name="uf"
-            defaultValue={uf}
-            className="border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
-          >
-            <option value="">UF: Todas</option>
-            {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
-          </select>
+          {/* UF + Partido + Ordenar: linha própria no mobile, inline no desktop */}
+          <div className="w-full sm:w-auto flex gap-3 flex-wrap sm:contents">
+            <select
+              name="uf"
+              defaultValue={uf}
+              className="flex-1 sm:flex-none border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
+            >
+              <option value="">UF: Todas</option>
+              {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
+            </select>
 
-          {/* Partido */}
-          <select
-            name="partido"
-            defaultValue={partido}
-            className="border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
-          >
-            <option value="">Partido: Todos</option>
-            {partidos.map((p) => <option key={p} value={p}>{p}</option>)}
-          </select>
+            <select
+              name="partido"
+              defaultValue={partido}
+              className="flex-1 sm:flex-none border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
+            >
+              <option value="">Partido: Todos</option>
+              {partidos.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
 
-          {/* Ordenar */}
-          <select
-            name="sort"
-            defaultValue={sort}
-            className="border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
-          >
-            <option value="nome">Ordenar: Nome A-Z</option>
-            <option value="gasto_desc">Ordenar: Maior gasto</option>
-            <option value="gasto_asc">Ordenar: Menor gasto</option>
-          </select>
+            <select
+              name="sort"
+              defaultValue={sort}
+              className="flex-1 sm:flex-none border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
+            >
+              <option value="nome">Ordenar: Nome A-Z</option>
+              <option value="gasto_desc">Ordenar: Maior gasto</option>
+              <option value="gasto_asc">Ordenar: Menor gasto</option>
+            </select>
 
-          <button
-            type="submit"
-            className="bg-brand-blue text-white rounded-lg px-5 py-[11px] text-sm font-bold hover:bg-[#0d3d96] transition-colors"
-          >
-            Aplicar
-          </button>
+            <button
+              type="submit"
+              className="w-full sm:w-auto bg-brand-blue text-white rounded-lg px-5 py-[11px] text-sm font-bold hover:bg-[#0d3d96] transition-colors"
+            >
+              Aplicar
+            </button>
+          </div>
         </form>
 
         {/* Chips de filtros ativos + contagem */}

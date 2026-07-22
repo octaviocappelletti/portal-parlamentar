@@ -147,7 +147,7 @@ export default async function DetalhePage({ params }: Props) {
           {kpis.map(({ label: kpiLabel, valor, delta, deltaPos }, i) => (
             <div
               key={kpiLabel}
-              className={`px-[26px] py-6 ${i < 3 ? "sm:border-r border-border-base" : ""}`}
+              className={`px-4 sm:px-[26px] py-5 sm:py-6 ${i < 3 ? "sm:border-r border-border-base" : ""}`}
             >
               <div className="text-[13px] text-text-body font-semibold mb-1.5">
                 {kpiLabel}
@@ -164,7 +164,7 @@ export default async function DetalhePage({ params }: Props) {
       </div>
 
       {/* Corpo — 2 colunas */}
-      <div className="max-w-[1180px] mx-auto px-8 py-8 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8">
+      <div className="max-w-[1180px] mx-auto px-4 sm:px-8 py-8 grid grid-cols-1 lg:grid-cols-[1.2fr_1fr] gap-8">
         {/* Gastos por categoria */}
         <div>
           <h2 className="text-[18px] font-extrabold text-text-strong mb-4">
