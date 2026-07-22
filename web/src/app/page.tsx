@@ -57,18 +57,21 @@ const COMO_FUNCIONA = [
     titulo: "Encontre o parlamentar",
     texto: "Busque por nome, estado ou partido e acesse o perfil completo.",
     badge: "bg-blue-bg text-brand-blue",
+    href: null,
   },
   {
     num: "2",
     titulo: "Analise os gastos",
     texto: "Gráficos claros mostram para onde vai cada real da verba.",
     badge: "bg-green-bg text-brand-green",
+    href: "/gastos",
   },
   {
     num: "3",
     titulo: "Acompanhe as leis",
     texto: "Veja projetos de lei, votos e a tramitação de cada proposta.",
     badge: "bg-yellow-bg text-yellow-text",
+    href: "/proposicoes",
   },
 ] as const;
 
@@ -80,16 +83,19 @@ export default async function Home() {
       valor: (totalCamara ?? 513).toLocaleString("pt-BR"),
       cor: "text-brand-blue",
       label: "Deputados federais",
+      href: "/camara",
     },
     {
       valor: (totalSenado ?? 81).toLocaleString("pt-BR"),
       cor: "text-brand-green",
       label: "Senadores",
+      href: "/senado",
     },
     {
       valor: totalGasto > 0 ? BRL_COMPACT.format(totalGasto) : "R$ 1,2 bi",
       cor: "text-brand-blue-dark",
       label: "Em verbas",
+      href: "/gastos",
     },
     {
       valor:
@@ -98,6 +104,7 @@ export default async function Home() {
           : "28,4 mil",
       cor: "text-brand-blue-dark",
       label: "Proposições",
+      href: "/proposicoes",
     },
   ];
 
@@ -146,16 +153,17 @@ export default async function Home() {
       {/* Stats strip — valores reais do banco */}
       <div className="border-t border-border-base">
         <div className="max-w-[1180px] mx-auto grid grid-cols-2 sm:grid-cols-4">
-          {stats.map(({ valor, cor, label }, i) => (
-            <div
+          {stats.map(({ valor, cor, label, href }, i) => (
+            <Link
               key={label}
-              className={`text-center py-[26px] px-6 ${i < 3 ? "sm:border-r border-border-base" : ""}`}
+              href={href}
+              className={`text-center py-[26px] px-6 hover:bg-surface-alt transition-colors ${i < 3 ? "sm:border-r border-border-base" : ""}`}
             >
               <div className={`text-[30px] font-extrabold ${cor}`}>{valor}</div>
               <div className="text-[13px] text-text-body font-semibold mt-1">
                 {label}
               </div>
-            </div>
+            </Link>
           ))}
         </div>
       </div>
@@ -170,22 +178,30 @@ export default async function Home() {
             Três passos para acompanhar a atividade parlamentar
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {COMO_FUNCIONA.map(({ num, titulo, texto, badge }) => (
-              <div
-                key={num}
-                className="bg-white border border-border-base rounded-xl p-[26px]"
-              >
-                <div
-                  className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center font-extrabold mb-3.5 ${badge}`}
+            {COMO_FUNCIONA.map(({ num, titulo, texto, badge, href }) => {
+              const inner = (
+                <>
+                  <div className={`w-[34px] h-[34px] rounded-lg flex items-center justify-center font-extrabold mb-3.5 ${badge}`}>
+                    {num}
+                  </div>
+                  <h3 className="font-bold text-base text-text-strong mb-1.5">{titulo}</h3>
+                  <p className="text-sm text-text-body leading-relaxed">{texto}</p>
+                </>
+              );
+              return href ? (
+                <Link
+                  key={num}
+                  href={href}
+                  className="bg-white border border-border-base rounded-xl p-[26px] hover:shadow-md hover:-translate-y-px transition-all block"
                 >
-                  {num}
+                  {inner}
+                </Link>
+              ) : (
+                <div key={num} className="bg-white border border-border-base rounded-xl p-[26px]">
+                  {inner}
                 </div>
-                <h3 className="font-bold text-base text-text-strong mb-1.5">
-                  {titulo}
-                </h3>
-                <p className="text-sm text-text-body leading-relaxed">{texto}</p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
