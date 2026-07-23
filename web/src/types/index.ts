@@ -11,6 +11,20 @@ export interface Parlamentar {
   foto_url?: string;
   data_nascimento?: string;
   situacao?: string;
+  redes_sociais?: string[];
+  website?: string;
+}
+
+export interface ParlamentarOrgao {
+  id: number;
+  parlamentar_id: number;
+  id_orgao: number;
+  nome_orgao?: string;
+  sigla_orgao?: string;
+  titulo?: string;
+  cod_titulo?: string;
+  data_inicio?: string;
+  data_fim?: string | null;
 }
 
 export interface Mandato {

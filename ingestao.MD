@@ -653,3 +653,292 @@ sobrescreve os registros existentes — não é necessário limpar as tabelas an
 - [ ] Configurar GitHub Actions para ingestão diária/semanal de presença (incrementar por semana)
 - [ ] Avaliar exibição de presença em comissões (tabela `presenca_evento_camara`) no front-end
 - [ ] Considerar agregar presença por mês para histórico temporal no perfil do parlamentar
+
+---
+
+## 2026-07-22 — Presença nos cards da listagem e diagnóstico de dados históricos
+
+### Implementações realizadas
+
+#### 1. View `presenca_resumo` (db/schema_presenca.sql)
+
+Criada view SQL que agrega o percentual de presença por parlamentar para os **últimos
+12 meses**, exposta via PostgREST ao front-end:
+
+```sql
+CREATE OR REPLACE VIEW presenca_resumo AS
+SELECT 'camara'::text AS casa, id_deputado AS id_externo,
+  COUNT(*) AS total_votacoes,
+  COUNT(*) FILTER (WHERE status_presenca = 'presente_votou') AS presencas,
+  ROUND(...) AS pct_presenca
+FROM voto_camara_enriquecido
+WHERE data_hora >= NOW() - INTERVAL '12 months'
+GROUP BY id_deputado
+UNION ALL
+-- mesma estrutura para senado (categoria_presenca IN ('presente_votou','presente_sem_voto'))
+...
+GRANT SELECT ON presenca_resumo TO anon, authenticated;
+```
+
+A view usa `NOW() - INTERVAL '12 months'` (calculado em tempo de query), então nenhuma
+re-execução de script é necessária para mantê-la atualizada — ela sempre reflete os últimos
+12 meses dos dados no banco.
+
+#### 2. Página de listagem (`web/src/app/[casa]/page.tsx`)
+
+Adicionada query em paralelo à busca de gastos para buscar `pct_presenca` de todos os
+parlamentares exibidos na página (evita N+1 queries):
+
+```tsx
+const [{ data: totaisData }, { data: presencaData }] = await Promise.all([
+  supabase.from("despesa_resumo_ano").select(...)...,
+  supabase.from("presenca_resumo").select("id_externo, pct_presenca")
+    .eq("casa", casa).in("id_externo", idExternos),
+]);
+const presencaMap = new Map(presencaData.map(r => [r.id_externo, r.pct_presenca]));
+```
+
+#### 3. Componente `ParlamentarCard`
+
+Adicionada prop `presencaPct: number | null` com exibição colorida:
+
+| Valor | Cor exibida |
+|---|---|
+| ≥ 75% | Verde (`#168821`) |
+| < 75% | Vermelho (`#c0392b`) |
+| `null` (sem dados) | Cinza "N/D" (`#9aa7b6`) |
+
+---
+
+### Problema 14 — API da Câmara retorna apenas dados recentes mesmo com range de 12 meses
+
+**Sintoma:** Após rodar o script com `DATA_INICIO=2025-07-22 DATA_FIM=2026-07-22`, a tabela
+`votacao_camara` continha apenas dados de junho e julho de 2026:
+
+```
+| mes        | votacoes |
+|------------|----------|
+| 2026-06-01 | 32       |
+| 2026-07-01 | 784      |
+```
+
+**Investigação:**
+1. Cache descartado como causa — a chave do cache é hash de `{url, params}` incluindo
+   `dataInicio` e `dataFim`, então cada range cria arquivos diferentes em `.cache/`.
+2. O código front-end estava correto — `dateFrom12MonthsAgo()` retorna `2025-07-22` e
+   a query usa `.gte("data_hora", dataFrom)`.
+3. O problema estava nos dados em si: a API `/votacoes` da Câmara aparentemente não
+   disponibiliza votações históricas além dos últimos ~60 dias quando consultada com um
+   range amplo, ou o endpoint simplesmente não possui dados anteriores a junho/2026 para
+   o período consultado.
+
+**Diagnóstico definitivo:** Verificação direta via query SQL no Supabase confirmou que os
+dados mais antigos são de junho/2026, mesmo com a segunda ingestão cobrindo 12 meses.
+
+**Solução adotada:** Rodar o script mês a mês com `USE_CACHE=0` para forçar re-download
+e garantir que cada janela de 30 dias seja consultada separadamente, evitando qualquer
+limite silencioso da API:
+
+```powershell
+$env:USE_CACHE = "0"
+$meses = @(
+  @("2025-07-22","2025-07-31"), @("2025-08-01","2025-08-31"),
+  @("2025-09-01","2025-09-30"), ...
+)
+foreach ($m in $meses) {
+  $env:DATA_INICIO = $m[0]; $env:DATA_FIM = $m[1]
+  python scripts\ingestao_presenca_camara.py
+}
+```
+
+**Status:** Em diagnóstico. Se a API confirmar retornar zero votações para meses de 2025,
+a limitação é da fonte (API Câmara não arquiva votações via `/votacoes` além de ~60 dias).
+Nesse caso, os dados históricos disponíveis são apenas os que existem no banco.
+
+---
+
+### Resultado das implementações
+
+| Onde | O que mudou |
+|---|---|
+| `/camara` e `/senado` | Cards exibem % presença com cor por faixa |
+| `/camara/{id}` | KPI "Presença" com percentual e "X de Y votações (12m)" |
+| `/camara/{id}/presenca` | Tabela paginada de votações nominais (50/página) |
+| Supabase | View `presenca_resumo` para agregação eficiente |
+
+### Pendências
+
+- [ ] Confirmar se API da Câmara tem dados históricos de 2025 via range mensal
+- [ ] Se dados históricos existirem: rodar ingestão mês a mês para completar o histórico
+- [ ] Configurar GitHub Actions para ingestão incremental semanal (última semana)
+- [ ] Rodar `presenca_resumo` view no Supabase SQL Editor (pré-requisito para cards da listagem)
+
+---
+
+## 2026-07-23 — Feature: redes sociais e órgãos/comissões dos parlamentares
+
+Implementação de nova feature que exibe no perfil do parlamentar: links de redes sociais
+e lista de cargos ocupados (comissões, frentes parlamentares, lideranças, mesa diretora).
+
+---
+
+### Fontes de dados utilizadas
+
+#### Câmara dos Deputados
+
+| Endpoint | Uso |
+|---|---|
+| `GET /deputados/{id}` | Já cacheado da ingestão principal — extrai `redeSocial` (array de URLs) e `urlWebsite` |
+| `GET /deputados/{id}/orgaos` | Participação em comissões e outros órgãos — `titulo`, `nomeOrgao`, `siglaOrgao`, `dataInicio`, `dataFim` |
+
+#### Senado Federal
+
+| Endpoint | Uso |
+|---|---|
+| `GET /senador/{cod}` (XML) | Já cacheado — extrai `UrlPaginaParticular` (único link de rede social disponível) |
+| `GET /senador/{cod}/comissoes?formato=json` | Participação como membro de comissões |
+| `GET /senador/{cod}/cargos?formato=json` | Cargos em frentes parlamentares e outros órgãos |
+| `GET /senador/{cod}/liderancas?formato=json` | Lideranças partidárias e de blocos |
+
+**Diferença estrutural:** A Câmara expõe todos os vínculos em um único endpoint `/orgaos`.
+O Senado separa em três endpoints distintos por tipo de vínculo. Não há endpoint unificado
+de "órgãos" no Senado equivalente ao da Câmara.
+
+**Redes sociais no Senado:** Não existe endpoint com lista de plataformas. O único campo
+disponível é `UrlPaginaParticular`, que pode conter qualquer URL (Facebook, Twitter, site
+pessoal). A detecção de plataforma é feita no front-end por análise do domínio da URL.
+
+---
+
+### Arquivos criados
+
+| Arquivo | Descrição |
+|---|---|
+| `db/schema_social_orgaos.sql` | DDL idempotente: colunas `redes_sociais` (JSONB) e `website` em `parlamentar`; tabela `parlamentar_orgao`; view `parlamentar_orgao_ativo`; RLS + grants + índices |
+| `ingestao/scripts/ingestao_social_orgaos_camara.py` | Ingestão de social e órgãos para deputados |
+| `ingestao/scripts/ingestao_social_orgaos_senadores.py` | Ingestão de social e órgãos para senadores |
+| `web/src/components/RedesSociais.tsx` | Ícones SVG inline por plataforma (X, Facebook, YouTube, Instagram, link genérico) com detecção automática por domínio |
+
+**Arquivos modificados:**
+- `ingestao/lib/db.py` — funções `update_parlamentar_social()` e `replace_parlamentar_orgaos()`
+- `web/src/types/index.ts` — campos `redes_sociais`, `website` no tipo `Parlamentar`; novo tipo `ParlamentarOrgao`
+- `web/src/app/[casa]/[id]/layout.tsx` — exibe ícones de social e chips de comissões no header do perfil
+
+**Estratégia de armazenamento de órgãos:** REPLACE por parlamentar (DELETE + INSERT a cada
+execução). Não foi usada constraint UNIQUE porque o mesmo órgão pode aparecer mais de uma
+vez (mandato anterior + atual, cargos diferentes em momentos diferentes).
+
+---
+
+### Problema 15 — Schema aplicado em versão desatualizada; coluna `fonte` e tipo `id_orgao` divergentes
+
+**Sintoma:** Após rodar `ingestao_social_orgaos_senadores.py`, todos os senadores retornaram
+`ERRO orgaos: invalid input syntax for type integer`. Os órgãos da Câmara (3137 registros)
+estavam no banco mas não apareciam no front-end.
+
+**Causa raiz:** A ordem de eventos criou três divergências entre o schema no banco e o
+schema no arquivo `.sql`:
+
+| Divergência | Schema no banco | Script / layout |
+|---|---|---|
+| Coluna `fonte` | ausente | usada no INSERT e no SELECT |
+| Tipo de `id_orgao` | `INTEGER` | scripts enviam strings (`"lid_PT_Líder_0"`) |
+| View `parlamentar_orgao_ativo` | compilada sem `fonte` | SELECT `*` não inclui `fonte` |
+
+**Sequência de eventos que gerou o problema:**
+1. Schema SQL (versão inicial, sem `fonte`, com `id_orgao INTEGER`) foi aplicado ao Supabase.
+2. Schema SQL foi atualizado no repositório para adicionar `fonte TEXT` e mudar `id_orgao` para `TEXT`, mas **não foi re-aplicado ao Supabase**.
+3. Script da Câmara rodou com a versão antiga do schema → 3137 órgãos inseridos sem `fonte`.
+4. Script do Senado rodou com o script novo (que inclui `fonte` e chaves TEXT) → todos os INSERTs falharam com `invalid input syntax for type integer`.
+5. Front-end solicitava `fonte` no SELECT → PostgREST retornava erro → lista silenciosamente vazia.
+
+**Investigação:** Queries diagnósticas no Supabase revelaram:
+```sql
+SELECT casa, COUNT(*) FROM parlamentar_orgao JOIN parlamentar ON ... GROUP BY casa;
+-- Resultado: camara=3137, senado=0
+
+SELECT id_orgao, fonte, ... FROM parlamentar_orgao_ativo WHERE parlamentar_id = 1;
+-- Erro: column "fonte" does not exist
+```
+
+**Resolução aplicada (em ordem):**
+
+1. Adicionar coluna ausente:
+```sql
+ALTER TABLE parlamentar_orgao ADD COLUMN IF NOT EXISTS fonte TEXT;
+```
+
+2. Alterar tipo da coluna (bloqueado pela view — resolvido dropando e recriando):
+```sql
+DROP VIEW IF EXISTS parlamentar_orgao_ativo;
+ALTER TABLE parlamentar_orgao ALTER COLUMN id_orgao TYPE TEXT;
+CREATE OR REPLACE VIEW parlamentar_orgao_ativo AS
+  SELECT * FROM parlamentar_orgao
+  WHERE data_fim IS NULL OR data_fim >= CURRENT_DATE;
+GRANT SELECT ON parlamentar_orgao_ativo TO anon, authenticated;
+```
+
+3. Remover `fonte` do SELECT no `layout.tsx` enquanto o banco era corrigido (coluna não
+   usada na exibição — apenas para filtragem futura):
+```tsx
+// antes:
+.select("id_orgao, fonte, nome_orgao, sigla_orgao, titulo")
+// depois:
+.select("id_orgao, nome_orgao, sigla_orgao, titulo")
+```
+
+4. Re-executar ambos os scripts após as correções no banco.
+
+**Lição aprendida:** Sempre re-aplicar o schema SQL ao Supabase antes de rodar scripts que
+dependem de colunas novas. O `CREATE TABLE IF NOT EXISTS` é idempotente mas **não atualiza
+colunas de tabelas já existentes** — para isso é necessário `ALTER TABLE ADD COLUMN IF NOT EXISTS`.
+
+---
+
+### Problema 16 — Cache do PostgREST não detecta novos objetos automaticamente
+
+**Sintoma:** Após aplicar o schema e rodar os scripts com sucesso, o front-end não exibia
+os dados mesmo com 3137 registros confirmados no banco.
+
+**Causa:** O PostgREST do Supabase cacheia o schema no startup. Novas tabelas, views e
+colunas adicionadas depois não são detectadas automaticamente.
+
+**Resolução:** Forçar recarga do schema via SQL:
+```sql
+NOTIFY pgrst, 'reload schema';
+```
+Equivalente ao botão "Reload schema" em Supabase → Project Settings → API.
+
+**Observação:** Mesmo após o NOTIFY, os dados não apareceram por causa do Problema 15
+(coluna `fonte` ainda ausente causando erro silencioso no front-end). Os dois problemas
+mascaravam um ao outro.
+
+---
+
+### Resultado final (2026-07-23) — CONCLUÍDO
+
+Após a correção do schema (adição de `fonte`, alteração de `id_orgao` para TEXT e
+recriação da view), ambos os scripts foram re-executados com sucesso.
+
+| Item | Status |
+|---|---|
+| Schema `db/schema_social_orgaos.sql` aplicado ao Supabase | ✅ (após correções manuais) |
+| Coluna `fonte` adicionada | ✅ |
+| Tipo `id_orgao` alterado para TEXT | ✅ |
+| View `parlamentar_orgao_ativo` recriada | ✅ |
+| Órgãos da Câmara ingeridos | ✅ |
+| Órgãos da Câmara exibidos no front-end | ✅ |
+| Redes sociais dos deputados | ✅ |
+| Órgãos do Senado ingeridos | ✅ |
+| Redes sociais dos senadores | ✅ (maioria sem `UrlPaginaParticular` — comportamento esperado da API) |
+| Órgãos do Senado exibidos no front-end | ✅ |
+
+Os paths JSON dos três endpoints do Senado (`/comissoes`, `/cargos`, `/liderancas`)
+corresponderam aos esperados pelo script — o `_deep_list` navegou corretamente a
+estrutura aninhada sem necessidade de ajuste.
+
+**Pendências futuras:**
+- [ ] Re-executar `ingestao_social_orgaos_camara.py` e `ingestao_social_orgaos_senadores.py`
+      periodicamente (sugestão: mensal) para refletir mudanças de cargo nas comissões
+- [ ] Avaliar exibição de histórico de cargos (órgãos com `data_fim` preenchida) em aba separada
+- [ ] Investigar se algum senador tem `UrlPaginaParticular` no cache e se o front-end exibe corretamente

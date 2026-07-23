@@ -154,6 +154,51 @@ def replace_fornecedor_socios(conn: psycopg.Connection, cnpj: str, socios: list[
             )
 
 
+def update_parlamentar_social(
+    conn: psycopg.Connection,
+    parlamentar_id: int,
+    redes_sociais: list[str],
+    website: str | None,
+) -> None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE parlamentar
+               SET redes_sociais = %s,
+                   website       = %s,
+                   updated_at    = NOW()
+             WHERE id = %s
+            """,
+            (
+                json.dumps(redes_sociais, ensure_ascii=False) if redes_sociais else None,
+                website,
+                parlamentar_id,
+            ),
+        )
+
+
+def replace_parlamentar_orgaos(
+    conn: psycopg.Connection, parlamentar_id: int, orgaos: list[dict]
+) -> None:
+    """Remove todos os órgãos do parlamentar e reinsere a lista atual (idempotente)."""
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM parlamentar_orgao WHERE parlamentar_id = %s", (parlamentar_id,)
+        )
+        for o in orgaos:
+            cur.execute(
+                """
+                INSERT INTO parlamentar_orgao
+                  (parlamentar_id, id_orgao, fonte, nome_orgao, sigla_orgao,
+                   titulo, cod_titulo, data_inicio, data_fim)
+                VALUES
+                  (%(parlamentar_id)s, %(id_orgao)s, %(fonte)s, %(nome_orgao)s, %(sigla_orgao)s,
+                   %(titulo)s, %(cod_titulo)s, %(data_inicio)s, %(data_fim)s)
+                """,
+                {**o, "fonte": o.get("fonte")},
+            )
+
+
 def upsert_despesa(conn: psycopg.Connection, d: dict) -> None:
     with conn.cursor() as cur:
         cur.execute(
