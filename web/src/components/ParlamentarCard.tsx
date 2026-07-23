@@ -59,6 +59,7 @@ export type ParlamentarCardProps = {
   uf: string | null | undefined;
   gasto2025: number | null;
   mediaGasto: number;
+  presencaPct: number | null;
   situacao: string | null | undefined;
   iniciais: string;
   href: string;
@@ -71,6 +72,7 @@ export default function ParlamentarCard({
   uf,
   gasto2025,
   mediaGasto,
+  presencaPct,
   situacao,
   iniciais,
   href,
@@ -123,7 +125,19 @@ export default function ParlamentarCard({
           </div>
           <div className="flex-1 bg-surface-alt rounded-lg p-[10px]">
             <p className="text-[11px] text-text-muted font-semibold mb-1">Presença</p>
-            <p className="text-[14px] font-extrabold text-text-muted">N/D</p>
+            <p
+              className="text-[14px] font-extrabold"
+              style={{
+                color:
+                  presencaPct === null
+                    ? "#9aa7b6"
+                    : presencaPct >= 75
+                    ? "#168821"
+                    : "#c0392b",
+              }}
+            >
+              {presencaPct !== null ? `${presencaPct}%` : "N/D"}
+            </p>
           </div>
         </div>
 

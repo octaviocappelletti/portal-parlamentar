@@ -6,7 +6,7 @@ const TABS = [
   { label: "Visão geral",  suffix: "",            enabled: true  },
   { label: "Gastos",       suffix: "/gastos",      enabled: true  },
   { label: "Proposições",  suffix: "/proposicoes", enabled: true  },
-  { label: "Votações",     suffix: "/votacoes",    enabled: false },
+  { label: "Presença",     suffix: "/presenca",    enabled: true  },
   { label: "Patrimônio",   suffix: "/patrimonio",  enabled: false },
 ] as const;
 

@@ -378,3 +378,278 @@ selecionado ficam em azul escuro; as demais ficam em cinza.
 **Filtro de situação dos deputados em Exercício:**
 Coluna `situacao` adicionada ao tipo `Parlamentar` em `types/index.ts`. Front filtra
 `.eq("situacao", "Exercício")` para Câmara tanto na listagem quanto no contador da home.
+
+---
+
+## 2026-07-22 — Feature de presença parlamentar (Fase 4)
+
+Implementação completa da Fase 4 do roadmap (§6.17 do CLAUDE.MD): ingestão e exibição
+de dados de presença para deputados (Câmara) e senadores, com identificação das fontes,
+desenvolvimento dos scripts, schema, front-end e resolução de múltiplos bugs de API.
+
+---
+
+### Fontes de dados utilizadas
+
+#### Câmara dos Deputados — API v2
+
+| Endpoint | Uso |
+|---|---|
+| `GET /deputados?idLegislatura={N}` | Lista base de deputados ativos (referência para calcular ausências nominais) |
+| `GET /eventos?dataInicio=&dataFim=` | Eventos no período — filtrados por `situacao` encerrada |
+| `GET /eventos/{id}/deputados` | Lista de presentes em cada evento de comissão/plenário |
+| `GET /votacoes?dataInicio=&dataFim=` | Votações nominais no período |
+| `GET /votacoes/{id}/votos` | Votos individuais por votação — proxy mais confiável de presença |
+
+**Lógica de ausência (Câmara):** Para cada votação nominal com votos registrados,
+todos os deputados ativos que **não aparecem** na lista de votos são marcados como
+`status_presenca = "ausente"`. Votações simbólicas (`votos = []`) não geram marcação
+de ausência — a lista vazia não é informação confiável de falta.
+
+#### Senado Federal — API Legislativa
+
+| Endpoint | Uso |
+|---|---|
+| `GET /plenario/lista/tiposComparecimento` | Tabela de domínio: códigos de comparecimento (`VO`, `NCom`, `LS`…) |
+| `GET /senador/lista/atual` | Cadastro de senadores em exercício |
+| `GET /votacao?dataInicio=&dataFim=` | Votações nominais com votos **embutidos** no payload (diferente da Câmara, que exige chamada extra) |
+
+**Diferença arquitetural importante:** O endpoint `/votacao` do Senado retorna
+cada votação já com o array `votos[]` dentro do payload — evita uma chamada extra
+por votação. Limite de 1 ano por chamada (parâmetro `dataInicio`/`dataFim`).
+
+---
+
+### Arquivos criados
+
+| Arquivo | Descrição |
+|---|---|
+| `ingestao/scripts/ingestao_presenca_camara.py` | Script de presença — Câmara |
+| `ingestao/scripts/ingestao_presenca_senadores.py` | Script de presença — Senado |
+| `db/schema_presenca.sql` | DDL idempotente com 7 tabelas + 2 views + RLS + índices |
+| `web/src/app/[casa]/[id]/presenca/page.tsx` | Subpágina de presença (KPI bar + tabela paginada) |
+
+**Tabelas criadas no banco:**
+- Câmara: `evento_camara`, `presenca_evento_camara`, `votacao_camara`, `voto_camara`
+- Senado: `tipo_comparecimento_senado`, `votacao_senado`, `voto_senado`
+
+**Views criadas para o front-end** (JOIN necessário para filtro por data):
+- `voto_camara_enriquecido` — junta `voto_camara` + `votacao_camara` para expor `data_hora`
+- `voto_senado_enriquecido` — junta `voto_senado` + `votacao_senado` para expor `data_sessao`
+
+**Front-end:** KPI "Presença" na página de detalhe saiu de `N/D` hardcoded para
+percentual real (últimos 12 meses). Aba "Presença" adicionada ao `TabsNav`.
+
+---
+
+### Problema 10 — `siglaVotoParlamentar` retorna descrição em vez de código
+
+**Sintoma:** Após primeira ingestão, o front-end exibia praticamente todos os
+senadores como "Ausente" mesmo em votações onde votaram.
+
+**Investigação:** O campo `siglaVotoParlamentar` no payload da API retorna o
+**texto de descrição** ("Votou", "Não Compareceu"), não o **código curto** ("VO", "NCom")
+como o nome do campo sugere. Além disso, `descricaoVotoParlamentar` vinha como `null`.
+
+Fluxo com o bug:
+```
+siglaVotoParlamentar = "Votou"
+↓
+mapa_categoria.get("Votou") → None    ← "Votou" não estava em _CATEGORIA_ESTATICA (só "VO")
+↓
+_inferir_categoria(descricaoVotoParlamentar or "")
+= _inferir_categoria("")              ← descrição é null, passa string vazia
+↓
+fallback conservador → "ausente_nao_justificado"   ← TODOS os votos ficavam "ausente"
+```
+
+**Solução:** Três camadas de correção aplicadas:
+
+1. **Mapa estático expandido** — adicionados os textos de descrição como chaves diretas:
+```python
+"Votou":                         "presente_votou",
+"Presente no Senado Federal":    "presente_sem_voto",
+"Não Compareceu":                "ausente_nao_justificado",
+"Licença saúde":                 "ausente_justificado",
+# ... demais textos conhecidos
+```
+
+2. **Fallback corrigido** — `_inferir_categoria` agora é chamada com o texto do próprio
+campo `siglaVotoParlamentar` antes de tentar `descricaoVotoParlamentar`:
+```python
+# antes: _inferir_categoria(descricao_voto)   ← sempre recebia ""
+# depois: _inferir_categoria(sigla) or _inferir_categoria(descricao_voto)
+```
+`"VOTOU" in "Votou".upper()` é `True`, retornando `"presente_votou"` corretamente.
+
+3. **`_CATEGORIA_ESTATICA` como fallback direto** — o mapa estático era usado apenas
+para construir `mapa_categoria` a partir da tabela de domínio da API. Siglas fora
+da tabela de domínio (que a API pode não retornar em `/tiposComparecimento`) não
+estavam disponíveis na hora do processamento dos votos.
+
+```python
+# antes:
+categoria = mapa_categoria.get(sigla)
+
+# depois (cadeia de 4 níveis):
+categoria = (
+    mapa_categoria.get(sigla)        # 1. tabela de domínio da API
+    or _CATEGORIA_ESTATICA.get(sigla) # 2. mapa estático direto
+)
+if not categoria:
+    categoria = _inferir_categoria(sigla) or _inferir_categoria(descricao_voto)
+```
+
+---
+
+### Problema 11 — Siglas de voto literal não mapeadas
+
+**Sintoma:** Warning no final da ingestão listando 11 siglas não mapeadas:
+```
+['AP', 'Abstenção', 'LAP', 'LP', 'LS', 'MIS', 'NCom', 'Não', 'P-NRV',
+ 'Presidente (art. 51 RISF)', 'Sim']
+```
+
+**Causa:** A API usa dois esquemas de codificação misturados no mesmo campo:
+- Códigos de comparecimento: `AP`, `LS`, `NCom`, `P-NRV` (presença/ausência na sessão)
+- Valores literais do voto: `Sim`, `Não`, `Abstenção` (o sentido do voto)
+
+Os valores literais não constam na tabela `/tiposComparecimento`, que cobre apenas os
+códigos de comparecimento. As siglas `LP` (Licença Particular) e `LAP` (Licença por
+Atividade Parlamentar) também não estavam mapeadas. `Presidente (art. 51 RISF)` é
+uma categoria especial do RISF para o senador que preside a sessão.
+
+**Mapeamentos adicionados:**
+
+| Sigla/Valor | Significado | Categoria |
+|---|---|---|
+| `Sim` | Votou a favor | `presente_votou` |
+| `Não` | Votou contra (presente e votante) | `presente_votou` |
+| `Abstenção` | Se absteve — presente e votante pelo RISF | `presente_votou` |
+| `LP` | Licença Particular | `ausente_justificado` |
+| `LAP` | Licença por Atividade Parlamentar | `ausente_justificado` |
+| `NA` | Dispositivo não citado — código residual | `ausente_nao_justificado` |
+| `Presidente (art. 51 RISF)` | Presidindo a sessão, vota só em empate | `presente_sem_voto` |
+
+---
+
+### Problema 12 — `_extrair_votos` não descia o nível extra do XML
+
+**Sintoma:** Algumas votações com votos registrados na API chegavam com lista vazia
+após o parse, resultando em votação registrada mas sem votos individuais.
+
+**Causa:** Quando a API retorna estrutura XML aninhada (convertida para JSON via
+`xmltodict`), a chave `Votos` contém um dict `{"Voto": [...]}` em vez de uma lista.
+A função anterior fazia `ensure_list({"Voto": [...]})` que retornava
+`[{"Voto": [...]}]` — uma lista de um dict, não de votos individuais.
+
+```python
+# antes (bug):
+for chave in ("votos", "Votos"):
+    val = vot.get(chave)
+    if val is not None:
+        return ensure_list(val)   # ← wrapping dict inteiro em lista
+
+# depois (correto):
+for chave_outer in ("votos", "Votos"):
+    val = vot.get(chave_outer)
+    if isinstance(val, list):
+        return val
+    if isinstance(val, dict):
+        # XML aninhado: {"Votos": {"Voto": [...]}}
+        for chave_inner in ("Voto", "voto"):
+            inner = val.get(chave_inner)
+            if inner is not None:
+                return ensure_list(inner)   # ← desce o nível correto
+```
+
+---
+
+### Problema 13 — `_extrair_lista` embrulhava dict em vez de descer mais um nível
+
+**Sintoma:** Em algumas respostas, `fetch_votacoes_senado` retornava
+`[{"Votacao": [...]}]` em vez da lista de votações.
+
+**Causa:** A estrutura aninhada `{"VotacaoParlamentar": {"Votacoes": {"Votacao": [...]}}}` 
+fazia a função encontrar a chave `"Votacoes"` com valor `{"Votacao": [...]}` (um dict) e
+imediatamente embrulhá-lo em `[dict]` sem tentar descer mais um nível.
+
+```python
+# antes (bug):
+if isinstance(val, dict):
+    return [val]   # ← embrulhou {"Votacao": [...]} sem descer
+
+# depois (correto):
+if isinstance(val, dict):
+    result = _extrair_lista(val, chaves_alvo)  # ← tenta descer primeiro
+    if result:
+        return result
+    return [val]   # fallback: trata como item único só se recursão falhar
+```
+
+---
+
+### Categorias de presença implementadas
+
+#### Câmara dos Deputados
+
+| `status_presenca` | Significado |
+|---|---|
+| `presente_votou` | Registrou voto na votação nominal |
+| `ausente` | Não aparece na lista de votos (inferência) |
+
+#### Senado Federal
+
+| `categoria_presenca` | Significado |
+|---|---|
+| `presente_votou` | Registrou voto (Sim, Não, Abstenção, VO) |
+| `presente_sem_voto` | Estava na sessão mas não votou (P-NRV, Presidente art. 51) |
+| `ausente_justificado` | Ausência com justificativa aceita (LS, LP, LAP, AP, MIS…) |
+| `ausente_nao_justificado` | Não compareceu sem justificativa (NCom, NA) |
+
+**Nota de produto:** O percentual de presença exibido no front-end conta
+`presente_votou` + `presente_sem_voto` como "presente" para o Senado, e apenas
+`presente_votou` para a Câmara (único status disponível com certeza).
+
+---
+
+### Resultado da sessão
+
+| Tabela | Registros (período 07/2025–07/2026) |
+|---|---|
+| `votacao_camara` | — (dependente do volume da API no período) |
+| `voto_camara` | — (votações nominais × ~513 deputados por votação) |
+| `votacao_senado` | — (dependente do número de sessões plenárias) |
+| `voto_senado` | — (votações × ~81 senadores por votação) |
+| `tipo_comparecimento_senado` | ~50 códigos de domínio |
+
+---
+
+### Comandos para re-ingestão
+
+```powershell
+# Forçar UTF-8 (§6.15)
+$env:PYTHONIOENCODING = "utf-8"; $env:PYTHONUTF8 = "1"
+
+# Últimos 12 meses (ajustar DATA_INICIO conforme a data atual)
+$env:DATA_INICIO = "2025-07-22"
+$env:DATA_FIM    = "2026-07-22"
+$env:USE_CACHE   = "0"   # forçar re-download na primeira execução
+
+cd ingestao
+python scripts\ingestao_presenca_camara.py
+python scripts\ingestao_presenca_senadores.py
+```
+
+**Importante:** Ao re-ingerir para corrigir categorias erradas, o `ON CONFLICT DO UPDATE`
+sobrescreve os registros existentes — não é necessário limpar as tabelas antes.
+
+---
+
+### Pendências para próxima sessão
+
+- [ ] Verificar volume final de registros após ingestão completa dos 12 meses
+- [ ] Avaliar se o warning de "siglas desconhecidas" zerou após os fixes
+- [ ] Configurar GitHub Actions para ingestão diária/semanal de presença (incrementar por semana)
+- [ ] Avaliar exibição de presença em comissões (tabela `presenca_evento_camara`) no front-end
+- [ ] Considerar agregar presença por mês para histórico temporal no perfil do parlamentar

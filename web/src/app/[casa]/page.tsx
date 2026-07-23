@@ -98,21 +98,41 @@ export default async function ListaPage({ params, searchParams }: Props) {
     ),
   ].sort() as string[];
 
-  // Totais de gasto para os parlamentares desta página
-  const ids = parlamentares.map((p) => p.id);
-  const { data: totaisData } = ids.length
-    ? await supabase
-        .from("despesa_resumo_ano")
-        .select("parlamentar_id, total")
-        .in("parlamentar_id", ids)
-        .eq("ano", parseInt(ano, 10))
-    : { data: [] };
+  // Totais de gasto + presença para os parlamentares desta página
+  const ids        = parlamentares.map((p) => p.id);
+  const idExternos = parlamentares.map((p) => p.id_externo);
+
+  const [{ data: totaisData }, { data: presencaData }] = await Promise.all([
+    ids.length
+      ? supabase
+          .from("despesa_resumo_ano")
+          .select("parlamentar_id, total")
+          .in("parlamentar_id", ids)
+          .eq("ano", parseInt(ano, 10))
+      : Promise.resolve({ data: [] }),
+    idExternos.length
+      ? supabase
+          .from("presenca_resumo")
+          .select("id_externo, pct_presenca")
+          .eq("casa", casa)
+          .in("id_externo", idExternos)
+      : Promise.resolve({ data: [] }),
+  ]);
 
   const totaisMap = new Map(
     (totaisData ?? []).map((t: { parlamentar_id: number; total: number }) => [
       t.parlamentar_id,
       t.total,
     ]),
+  );
+
+  const presencaMap = new Map(
+    (presencaData ?? []).map(
+      (r: { id_externo: number; pct_presenca: number | null }) => [
+        r.id_externo,
+        r.pct_presenca,
+      ],
+    ),
   );
 
   // Ordenação client-side quando necessário
@@ -289,6 +309,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
                 uf={p.uf}
                 gasto2025={totaisMap.get(p.id) ?? null}
                 mediaGasto={mediaGasto}
+                presencaPct={presencaMap.get(p.id_externo) ?? null}
                 situacao={p.situacao}
                 iniciais={iniciais(p.nome)}
                 href={`/${casa}/${p.id_externo}`}

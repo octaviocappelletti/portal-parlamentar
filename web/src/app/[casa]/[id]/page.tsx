@@ -8,6 +8,12 @@ export const revalidate = 3600;
 
 const CORES_GASTO = ["#1351B4", "#1351B4", "#168821", "#168821", "#FFCD07"];
 
+function dateFrom12MonthsAgo(): string {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
+  return d.toISOString().slice(0, 10);
+}
+
 const STATUS_BADGE: Record<string, string> = {
   Aprovado:        "bg-green-bg text-brand-green",
   "Em tramitação": "bg-yellow-bg text-yellow-text",
@@ -57,6 +63,45 @@ export default async function DetalhePage({ params }: Props) {
   if (!parlamentar) notFound();
 
   const ANO = 2025;
+  const dataFrom = dateFrom12MonthsAgo();
+
+  // Queries de presença: usa id_externo (= id da URL) diretamente nas tabelas de voto
+  const [presencaTotal, presencaPresente] = await (async () => {
+    if (casa === "camara") {
+      const [{ count: total }, { count: presente }] = await Promise.all([
+        supabase
+          .from("voto_camara_enriquecido")
+          .select("*", { count: "exact", head: true })
+          .eq("id_deputado", Number(id))
+          .gte("data_hora", dataFrom),
+        supabase
+          .from("voto_camara_enriquecido")
+          .select("*", { count: "exact", head: true })
+          .eq("id_deputado", Number(id))
+          .eq("status_presenca", "presente_votou")
+          .gte("data_hora", dataFrom),
+      ]);
+      return [total ?? 0, presente ?? 0];
+    } else {
+      const [{ count: total }, { count: presente }] = await Promise.all([
+        supabase
+          .from("voto_senado_enriquecido")
+          .select("*", { count: "exact", head: true })
+          .eq("codigo_parlamentar", Number(id))
+          .gte("data_sessao", dataFrom),
+        supabase
+          .from("voto_senado_enriquecido")
+          .select("*", { count: "exact", head: true })
+          .eq("codigo_parlamentar", Number(id))
+          .in("categoria_presenca", ["presente_votou", "presente_sem_voto"])
+          .gte("data_sessao", dataFrom),
+      ]);
+      return [total ?? 0, presente ?? 0];
+    }
+  })();
+
+  const presencaPct =
+    presencaTotal > 0 ? Math.round((presencaPresente / presencaTotal) * 100) : null;
 
   const [
     { data: proposicoes },
@@ -115,9 +160,12 @@ export default async function DetalhePage({ params }: Props) {
     },
     {
       label: "Presença",
-      valor: "N/D",
-      delta: "dados em breve",
-      deltaPos: false,
+      valor: presencaPct !== null ? `${presencaPct}%` : "N/D",
+      delta:
+        presencaTotal > 0
+          ? `${presencaPresente} de ${presencaTotal} votações (12m)`
+          : "dados em breve",
+      deltaPos: presencaPct !== null && presencaPct >= 75,
     },
     {
       label: "Proposições",

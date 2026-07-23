@@ -95,6 +95,37 @@ export interface FornecedorSocio {
   cpf_representante_legal?: string;
 }
 
+/** Linha da view voto_camara_enriquecido — votação nominal + dados do evento. */
+export interface VotoCamaraEnriquecido {
+  votacao_id: string;
+  id_deputado: number;
+  nome?: string;
+  partido?: string;
+  uf?: string;
+  tipo_voto?: string | null;
+  status_presenca?: string | null;
+  data_hora?: string | null;
+  descricao_votacao?: string | null;
+  sigla_orgao?: string | null;
+  aprovacao?: string | null;
+}
+
+/** Linha da view voto_senado_enriquecido — votação nominal + dados da sessão. */
+export interface VotoSenadoEnriquecido {
+  codigo_sessao_votacao: number;
+  codigo_parlamentar: number;
+  nome_parlamentar?: string;
+  partido?: string;
+  uf?: string;
+  sigla_voto?: string | null;
+  descricao_voto?: string | null;
+  categoria_presenca?: string | null;
+  data_sessao?: string | null;
+  identificacao?: string | null;
+  descricao_votacao?: string | null;
+  resultado_votacao?: string | null;
+}
+
 /** Linha da view despesa_resumo_ano — carregada em SSR para montar a timeline. */
 export interface DespesaResumoAno {
   parlamentar_id: number;
