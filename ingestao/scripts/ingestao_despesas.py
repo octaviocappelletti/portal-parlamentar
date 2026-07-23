@@ -24,10 +24,9 @@ from lib.http import get_json
 BASE = "https://dadosabertos.camara.leg.br/api/v2"
 ANO_ATUAL = datetime.date.today().year
 
-# Ano mínimo absoluto — a CEAP existe desde 2009, mas limitamos
-# ao início da legislatura anterior para não sobrecarregar a primeira execução.
-# Ajuste para 2009 se quiser histórico completo.
-ANO_MINIMO_ABSOLUTO = 2015
+# Ano mínimo absoluto — mantemos apenas os últimos 5 anos (2021-presente).
+# Dados anteriores foram removidos pela migração db/migration_storage_opt.sql.
+ANO_MINIMO_ABSOLUTO = 2021
 
 
 def ano_inicio_parlamentar(conn: psycopg.Connection, parl_id: int, fallback: int) -> int:

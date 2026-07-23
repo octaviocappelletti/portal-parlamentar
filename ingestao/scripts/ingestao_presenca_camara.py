@@ -246,6 +246,25 @@ def processar_eventos(conn, data_inicio: str, data_fim: str) -> None:
         conn.commit()
 
 
+def _limpar_janela_rolante(conn) -> None:
+    """Remove votações com mais de 13 meses — o front só exibe os últimos 12."""
+    cutoff = str(date.today() - timedelta(days=13 * 30))
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM votacao_camara WHERE data_hora < %s::timestamptz",
+            (cutoff,),
+        )
+        n_vot = cur.rowcount
+        cur.execute(
+            "DELETE FROM evento_camara WHERE data_hora_inicio < %s::timestamptz",
+            (cutoff,),
+        )
+        n_ev = cur.rowcount
+    conn.commit()
+    if n_vot or n_ev:
+        print(f"-> Rolling cleanup: {n_vot} votacoes + {n_ev} eventos removidos (antes de {cutoff})")
+
+
 def processar_votacoes(conn, data_inicio: str, data_fim: str, deputados_ativos: dict) -> None:
     """
     Persiste votações nominais com votos individuais e marca ausências.
@@ -329,6 +348,7 @@ def main() -> None:
     with get_conn() as conn:
         processar_eventos(conn, data_inicio, data_fim)
         processar_votacoes(conn, data_inicio, data_fim, deputados_ativos)
+        _limpar_janela_rolante(conn)
 
     print("=== Camara presenca: ingestao concluida ===")
 

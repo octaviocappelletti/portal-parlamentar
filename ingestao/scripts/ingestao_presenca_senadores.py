@@ -310,6 +310,20 @@ def _parse_bool(val) -> bool:
 # ─── Processamento ────────────────────────────────────────────────────────────
 
 
+def _limpar_janela_rolante(conn) -> None:
+    """Remove votações do Senado com mais de 13 meses — o front só exibe 12."""
+    cutoff = str((date.today() - timedelta(days=13 * 30)))
+    with conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM votacao_senado WHERE data_sessao < %s::date",
+            (cutoff,),
+        )
+        n = cur.rowcount
+    conn.commit()
+    if n:
+        print(f"-> Rolling cleanup: {n} votacoes removidas (antes de {cutoff})")
+
+
 def ingerir_dimensoes(conn) -> dict[str, str]:
     """
     Persiste a tabela de tipos de comparecimento e devolve o mapa
@@ -446,6 +460,7 @@ def main() -> None:
     with get_conn() as conn:
         mapa_categoria = ingerir_dimensoes(conn)
         processar_votacoes(conn, data_inicio, data_fim, mapa_categoria)
+        _limpar_janela_rolante(conn)
 
     print("=== Senado presenca: ingestao concluida ===")
 
