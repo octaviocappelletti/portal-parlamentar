@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db";
+import { apiFetchOptional } from "@/lib/api";
 import type { Despesa } from "@/types";
 import { notFound } from "next/navigation";
 
@@ -22,23 +22,14 @@ interface Props {
 export default async function DespesaPage({ params }: Props) {
   const { casa, id, despesaId } = await params;
 
-  const { data: parlamentar } = await supabase
-    .from("parlamentar")
-    .select("id, nome")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single();
+  const [parlamentar, despesa] = await Promise.all([
+    apiFetchOptional<{ id: number; nome: string }>(`/parlamentares/${casa}/${id}`, 604800),
+    apiFetchOptional<Despesa>(`/despesas/${despesaId}`, 604800),
+  ]);
 
-  if (!parlamentar) notFound();
-
-  const { data: despesa } = await supabase
-    .from("despesa")
-    .select("*")
-    .eq("id", Number(despesaId))
-    .eq("parlamentar_id", parlamentar.id)
-    .single<Despesa>();
-
-  if (!despesa) notFound();
+  if (!parlamentar || !despesa) notFound();
+  // Garante que a despesa pertence ao parlamentar da URL
+  if (despesa.parlamentar_id !== parlamentar.id) notFound();
 
   return (
     <div className="max-w-[1180px] mx-auto px-8 py-8">

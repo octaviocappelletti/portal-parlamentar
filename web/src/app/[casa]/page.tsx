@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { supabase } from "@/lib/db";
+import { apiFetch } from "@/lib/api";
 import ParlamentarCard from "@/components/ParlamentarCard";
 import type { Parlamentar } from "@/types";
 
@@ -75,67 +75,48 @@ export default async function ListaPage({ params, searchParams }: Props) {
 
   const limit = Math.min(Math.max(parseInt(mostrar, 10) || STEP, STEP), 200);
 
-  // Queries paralelas
-  let baseQ = supabase.from("parlamentar").select("*", { count: "exact" }).eq("casa", casa);
-  if (situacao) baseQ = baseQ.eq("situacao", situacao);
-  if (q)        baseQ = baseQ.ilike("nome", `%${q}%`);
-  if (uf)       baseQ = baseQ.eq("uf", uf);
-  if (partido)  baseQ = baseQ.eq("partido", partido);
+  // Step 1: parlamentares + partidos em paralelo
+  const parlQs = new URLSearchParams({ casa, limit: String(limit), offset: "0" });
+  if (situacao) parlQs.set("situacao", situacao);
+  if (q)        parlQs.set("q",        q);
+  if (uf)       parlQs.set("uf",       uf);
+  if (partido)  parlQs.set("partido",  partido);
 
-  const [{ data: rawList, count }, { data: partidosData }] = await Promise.all([
-    baseQ.order("nome").range(0, limit - 1),
-    supabase.from("parlamentar").select("partido").eq("casa", casa).not("partido", "is", null),
+  const [parlRes, partidos] = await Promise.all([
+    apiFetch<{ data: Parlamentar[]; count: number }>(`/parlamentares?${parlQs}`, 86400),
+    apiFetch<string[]>(`/parlamentares/partidos?casa=${casa}`, 86400),
   ]);
 
-  const parlamentares = (rawList ?? []) as Parlamentar[];
-  const total = count ?? 0;
+  const parlamentares = parlRes.data;
+  const total         = parlRes.count;
 
-  const partidos = [
-    ...new Set(
-      (partidosData ?? [])
-        .map((r: { partido: string | null }) => r.partido)
-        .filter(Boolean),
-    ),
-  ].sort() as string[];
-
-  // Totais de gasto + presença para os parlamentares desta página
+  // Step 2: gastos + presença para esta página em paralelo
   const ids        = parlamentares.map((p) => p.id);
   const idExternos = parlamentares.map((p) => p.id_externo);
 
-  const [{ data: totaisData }, { data: presencaData }] = await Promise.all([
+  const [totaisData, presencaData] = await Promise.all([
     ids.length
-      ? supabase
-          .from("despesa_resumo_ano")
-          .select("parlamentar_id, total")
-          .in("parlamentar_id", ids)
-          .eq("ano", parseInt(ano, 10))
-      : Promise.resolve({ data: [] }),
+      ? apiFetch<{ parlamentar_id: number; total: number }[]>(
+          `/despesas/resumo-ano?ids=${ids.join(",")}&ano=${ano}`,
+          86400,
+        )
+      : Promise.resolve([]),
     idExternos.length
-      ? supabase
-          .from("presenca_resumo")
-          .select("id_externo, pct_presenca")
-          .eq("casa", casa)
-          .in("id_externo", idExternos)
-      : Promise.resolve({ data: [] }),
+      ? apiFetch<{ id_externo: number; pct_presenca: number | null }[]>(
+          `/parlamentares/presenca-resumo?casa=${casa}&ids=${idExternos.join(",")}`,
+          86400,
+        )
+      : Promise.resolve([]),
   ]);
 
   const totaisMap = new Map(
-    (totaisData ?? []).map((t: { parlamentar_id: number; total: number }) => [
-      t.parlamentar_id,
-      t.total,
-    ]),
+    totaisData.map((t) => [t.parlamentar_id, t.total]),
   );
-
   const presencaMap = new Map(
-    (presencaData ?? []).map(
-      (r: { id_externo: number; pct_presenca: number | null }) => [
-        r.id_externo,
-        r.pct_presenca,
-      ],
-    ),
+    presencaData.map((r) => [r.id_externo, r.pct_presenca]),
   );
 
-  // Ordenação client-side quando necessário
+  // Ordenação client-side por gasto
   let sorted = [...parlamentares];
   if (sort === "gasto_desc") {
     sorted.sort((a, b) => (totaisMap.get(b.id) ?? 0) - (totaisMap.get(a.id) ?? 0));
@@ -143,18 +124,15 @@ export default async function ListaPage({ params, searchParams }: Props) {
     sorted.sort((a, b) => (totaisMap.get(a.id) ?? 0) - (totaisMap.get(b.id) ?? 0));
   }
 
-  // Média de gasto para colorir o indicador de "acima da média" nos cards
   const gastos = sorted.map((p) => totaisMap.get(p.id) ?? 0).filter((v) => v > 0);
   const mediaGasto = gastos.length
     ? gastos.reduce((a, b) => a + b, 0) / gastos.length
     : 0;
 
-  // URLs para o toggle de casa (preserva filtros, reseta paginação)
   const sp: SP = { q, uf, partido, ano, mostrar: String(limit), sort };
   const camaraUrl = buildUrl("camara", sp, { mostrar: String(STEP) });
   const senadoUrl = buildUrl("senado", sp, { mostrar: String(STEP) });
 
-  // Chips de filtros ativos
   const filtrosAtivos: { label: string; removeUrl: string }[] = [];
   if (q)       filtrosAtivos.push({ label: `"${q}"`, removeUrl: buildUrl(casa, sp, { q: "" }) });
   if (uf)      filtrosAtivos.push({ label: uf,        removeUrl: buildUrl(casa, sp, { uf: "" }) });
@@ -177,7 +155,6 @@ export default async function ListaPage({ params, searchParams }: Props) {
       </div>
 
       <div className="max-w-[1180px] mx-auto px-4 sm:px-8">
-        {/* Título */}
         <div className="pt-8 pb-[18px]">
           <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong mb-2">
             {cargo}
@@ -187,9 +164,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
           </p>
         </div>
 
-        {/* Toolbar */}
         <form method="GET" action={`/${casa}`} className="flex gap-3 flex-wrap pb-[18px] items-center">
-          {/* Toggle Câmara / Senado */}
           <div className="flex bg-surface-alt border border-border-base rounded-lg p-1 gap-1 shrink-0">
             <Link
               href={camaraUrl}
@@ -213,7 +188,6 @@ export default async function ListaPage({ params, searchParams }: Props) {
             </Link>
           </div>
 
-          {/* Busca */}
           <div className="w-full sm:flex-1 sm:min-w-[220px] flex items-center bg-white border-[1.5px] border-border-input rounded-lg overflow-hidden">
             <input
               type="text"
@@ -234,7 +208,6 @@ export default async function ListaPage({ params, searchParams }: Props) {
             </button>
           </div>
 
-          {/* UF + Partido + Ordenar: linha própria no mobile, inline no desktop */}
           <div className="w-full sm:w-auto flex gap-3 flex-wrap sm:contents">
             <select
               name="uf"
@@ -273,7 +246,6 @@ export default async function ListaPage({ params, searchParams }: Props) {
           </div>
         </form>
 
-        {/* Chips de filtros ativos + contagem */}
         <div className="flex items-center gap-2 flex-wrap pb-5 min-h-[28px]">
           {filtrosAtivos.length > 0 && (
             <span className="text-[13px] text-text-muted font-semibold">Filtros ativos:</span>
@@ -294,7 +266,6 @@ export default async function ListaPage({ params, searchParams }: Props) {
           </span>
         </div>
 
-        {/* Grade de cartões */}
         {sorted.length === 0 ? (
           <p className="py-16 text-center text-text-muted">
             Nenhum parlamentar encontrado para os filtros selecionados.
@@ -319,7 +290,6 @@ export default async function ListaPage({ params, searchParams }: Props) {
           </div>
         )}
 
-        {/* Carregar mais / status de paginação */}
         <div className="flex flex-col items-center gap-3 py-8">
           {temMais && (
             <Link

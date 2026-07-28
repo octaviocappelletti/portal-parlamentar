@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { supabase } from "@/lib/db";
+import { apiFetch } from "@/lib/api";
 import AvatarFoto from "@/components/AvatarFoto";
 import type { Parlamentar } from "@/types";
 
@@ -12,8 +12,8 @@ export const metadata: Metadata = { title: "Ranking de gastos" };
 const PAGE_SIZE = 20;
 
 const CASAS = {
-  camara: { nome: "Câmara dos Deputados", cargo: "deputados federais", situacao: "Exercício" },
-  senado: { nome: "Senado Federal",       cargo: "senadores",          situacao: null        },
+  camara: { nome: "Câmara dos Deputados", cargo: "deputados federais" },
+  senado: { nome: "Senado Federal",       cargo: "senadores"          },
 } as const;
 
 type Casa = keyof typeof CASAS;
@@ -68,6 +68,11 @@ function buildUrl(sp: SP, overrides: Partial<SP>): string {
   return `/gastos${qs ? `?${qs}` : ""}`;
 }
 
+type GastosResponse = {
+  data: (Parlamentar & { total_gasto: number })[];
+  partidos: string[];
+};
+
 type Props = { searchParams: Promise<SP> };
 
 export default async function GastosPage({ searchParams }: Props) {
@@ -79,65 +84,26 @@ export default async function GastosPage({ searchParams }: Props) {
   if (!(casa in CASAS)) notFound();
 
   const casaKey = casa as Casa;
-  const { nome, cargo, situacao } = CASAS[casaKey];
+  const { nome, cargo } = CASAS[casaKey];
   const page = Math.max(1, parseInt(pagina, 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Passo 1: busca TODOS os parlamentares que batem com os filtros (apenas campos necessários)
-  let idQ = supabase
-    .from("parlamentar")
-    .select("id, id_externo, nome, partido, uf, situacao, foto_url")
-    .eq("casa", casa);
-  if (situacao) idQ = idQ.eq("situacao", situacao);
-  if (q)        idQ = idQ.ilike("nome", `%${q}%`);
-  if (uf)       idQ = idQ.eq("uf", uf);
-  if (partido)  idQ = idQ.eq("partido", partido);
+  const qs = new URLSearchParams({ casa, ano });
+  if (q)       qs.set("q",       q);
+  if (uf)      qs.set("uf",      uf);
+  if (partido) qs.set("partido", partido);
 
-  const [{ data: allParl }, { data: partidosData }] = await Promise.all([
-    idQ,
-    supabase.from("parlamentar").select("partido").eq("casa", casa).not("partido", "is", null),
-  ]);
+  const { data: allSorted, partidos } = await apiFetch<GastosResponse>(`/gastos?${qs}`, 86400);
 
-  const partidos = [
-    ...new Set(
-      (partidosData ?? [])
-        .map((r: { partido: string | null }) => r.partido)
-        .filter(Boolean),
-    ),
-  ].sort() as string[];
-
-  // Passo 2: busca totais de gasto para esses parlamentares no ano selecionado
-  const allIds = (allParl ?? []).map((p: { id: number }) => p.id);
-  const { data: totaisData } = allIds.length
-    ? await supabase
-        .from("despesa_resumo_ano")
-        .select("parlamentar_id, total")
-        .in("parlamentar_id", allIds)
-        .eq("ano", parseInt(ano, 10))
-    : { data: [] };
-
-  const totaisMap = new Map(
-    (totaisData ?? []).map((t: { parlamentar_id: number; total: number }) => [
-      t.parlamentar_id,
-      t.total,
-    ]),
-  );
-
-  // Passo 3: ordena globalmente por gasto DESC e pagina em JS
-  const allSorted = [...(allParl ?? [])].sort(
-    (a, b) => (totaisMap.get(b.id) ?? 0) - (totaisMap.get(a.id) ?? 0),
-  ) as Parlamentar[];
-
-  const total = allSorted.length;
+  const total      = allSorted.length;
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const sorted = allSorted.slice(offset, offset + PAGE_SIZE);
-  const maxTotal = Math.max(totaisMap.get(allSorted[0]?.id) ?? 0, 1);
+  const sorted     = allSorted.slice(offset, offset + PAGE_SIZE);
+  const maxTotal   = Math.max(allSorted[0]?.total_gasto ?? 0, 1);
 
   const sp: SP = { casa, q, uf, partido, ano, pagina };
   const camaraUrl = buildUrl(sp, { casa: "camara", pagina: "1" });
   const senadoUrl = buildUrl(sp, { casa: "senado", pagina: "1" });
 
-  // Janela de paginação (3 botões centrados na página atual)
   const winStart = Math.max(1, page - 1);
   const winPages: number[] = [];
   for (let i = winStart; i <= Math.min(winStart + 2, totalPages); i++) {
@@ -156,7 +122,6 @@ export default async function GastosPage({ searchParams }: Props) {
       </div>
 
       <div className="max-w-[1180px] mx-auto px-4 sm:px-8">
-        {/* Título */}
         <div className="pt-8 pb-[22px]">
           <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong mb-2">
             Ranking de gastos parlamentares
@@ -167,9 +132,7 @@ export default async function GastosPage({ searchParams }: Props) {
           </p>
         </div>
 
-        {/* Toggle Câmara / Senado + filtros */}
         <form method="GET" action="/gastos" className="flex gap-3 flex-wrap pb-[22px] items-center">
-          {/* Toggle casa — implementado como inputs ocultos + links visuais */}
           <div className="flex bg-surface-alt border border-border-base rounded-lg p-1 gap-1 shrink-0">
             <Link
               href={camaraUrl}
@@ -193,10 +156,8 @@ export default async function GastosPage({ searchParams }: Props) {
             </Link>
           </div>
 
-          {/* Casa como input oculto para o form submit preservar a seleção atual */}
           <input type="hidden" name="casa" value={casa} />
 
-          {/* Busca */}
           <div className="flex-1 min-w-[240px] flex items-center bg-white border-[1.5px] border-border-input rounded-lg overflow-hidden">
             <input
               type="text"
@@ -212,7 +173,6 @@ export default async function GastosPage({ searchParams }: Props) {
             </span>
           </div>
 
-          {/* UF */}
           <select
             name="uf"
             defaultValue={uf}
@@ -222,7 +182,6 @@ export default async function GastosPage({ searchParams }: Props) {
             {UFS.map((u) => <option key={u} value={u}>{u}</option>)}
           </select>
 
-          {/* Partido */}
           <select
             name="partido"
             defaultValue={partido}
@@ -232,7 +191,6 @@ export default async function GastosPage({ searchParams }: Props) {
             {partidos.map((p) => <option key={p} value={p}>{p}</option>)}
           </select>
 
-          {/* Ano */}
           <select
             name="ano"
             defaultValue={ano}
@@ -251,14 +209,12 @@ export default async function GastosPage({ searchParams }: Props) {
           </button>
         </form>
 
-        {/* Tabela */}
         {sorted.length === 0 ? (
           <p className="py-16 text-center text-text-muted">
             Nenhum parlamentar encontrado para os filtros selecionados.
           </p>
         ) : (
           <div className="pb-2">
-            {/* Cabeçalho — oculto em mobile */}
             <div className="hidden sm:grid grid-cols-[56px_2.4fr_1fr_1.6fr_90px] gap-4 px-4 py-3 bg-surface-alt rounded-t-lg text-xs font-bold text-text-body uppercase tracking-[0.03em]">
               <span>#</span>
               <span>Parlamentar</span>
@@ -270,7 +226,7 @@ export default async function GastosPage({ searchParams }: Props) {
             <div className="border border-border-base sm:border-t-0 rounded-lg sm:rounded-t-none sm:rounded-b-lg overflow-hidden">
               {sorted.map((p, i) => {
                 const pos = offset + i + 1;
-                const gasto = totaisMap.get(p.id);
+                const gasto = p.total_gasto || undefined;
                 const pct = gasto ? Math.round((gasto / maxTotal) * 100) : 0;
                 const cor = gasto ? corPosicao(pos, total) : "#eef2f7";
                 const isPrimeiro = i === 0 && page === 1;
@@ -283,7 +239,6 @@ export default async function GastosPage({ searchParams }: Props) {
                       isPrimeiro ? "bg-surface-alt" : "",
                     ].join(" ")}
                   >
-                    {/* Layout mobile — card compacto */}
                     <div className="sm:hidden px-4 py-4">
                       <div className="flex items-center gap-3">
                         <span className={`font-extrabold text-sm w-7 shrink-0 ${isPrimeiro ? "text-danger" : "text-text-body"}`}>
@@ -315,7 +270,6 @@ export default async function GastosPage({ searchParams }: Props) {
                       ) : null}
                     </div>
 
-                    {/* Layout desktop — grid */}
                     <div className="hidden sm:grid grid-cols-[56px_2.4fr_1fr_1.6fr_90px] gap-4 px-4 py-4 items-center">
                       <span className={`font-extrabold text-sm ${isPrimeiro ? "text-danger" : "text-text-body"}`}>
                         {pos}
@@ -349,7 +303,6 @@ export default async function GastosPage({ searchParams }: Props) {
           </div>
         )}
 
-        {/* Paginação */}
         <div className="flex items-center justify-between pt-5 pb-8">
           <span className="text-[13px] text-text-muted">
             Mostrando {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} de{" "}
@@ -385,15 +338,9 @@ export default async function GastosPage({ searchParams }: Props) {
 }
 
 function PagBtn({
-  href,
-  label,
-  active,
-  disabled,
+  href, label, active, disabled,
 }: {
-  href: string;
-  label: string;
-  active: boolean;
-  disabled?: boolean;
+  href: string; label: string; active: boolean; disabled?: boolean;
 }) {
   if (disabled) {
     return (

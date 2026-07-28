@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { supabase } from "@/lib/db";
+import { apiFetch, apiFetchOptional } from "@/lib/api";
 import GastosMensaisChart, { type MesItem } from "@/components/GastosMensaisChart";
 import GastosChart, { type GastoItem } from "@/components/GastosChart";
 import type { Parlamentar, Despesa } from "@/types";
@@ -40,6 +40,8 @@ function buildUrl(base: string, sp: SP, overrides: Partial<SP>): string {
   return `${base}${qs ? `?${qs}` : ""}`;
 }
 
+type ChartRow = { mes: number; natureza: string | null; valor_liquido: number | null };
+
 type Props = {
   params: Promise<{ casa: string; id: string }>;
   searchParams: Promise<SP>;
@@ -49,13 +51,10 @@ export default async function GastosParPage({ params, searchParams }: Props) {
   const { casa, id } = await params;
   const { ano = "2025", mes = "", natureza = "", pagina = "1" } = await searchParams;
 
-  const { data: parlamentar } = await supabase
-    .from("parlamentar")
-    .select("id, nome")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single<Pick<Parlamentar, "id" | "nome">>();
-
+  const parlamentar = await apiFetchOptional<Pick<Parlamentar, "id" | "nome">>(
+    `/parlamentares/${casa}/${id}`,
+    3600,
+  );
   if (!parlamentar) notFound();
 
   const anoNum = parseInt(ano, 10);
@@ -63,41 +62,28 @@ export default async function GastosParPage({ params, searchParams }: Props) {
   const page = Math.max(1, parseInt(pagina, 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Queries paralelas: dados para gráficos (ano inteiro) + tabela paginada com filtros
-  let tableQ = supabase
-    .from("despesa")
-    .select("*", { count: "exact" })
-    .eq("parlamentar_id", parlamentar.id)
-    .eq("ano", anoNum);
-  if (mesNum)    tableQ = tableQ.eq("mes", mesNum);
-  if (natureza)  tableQ = tableQ.eq("natureza", natureza);
+  const tableQs = new URLSearchParams({ ano: String(anoNum), limit: String(PAGE_SIZE), offset: String(offset) });
+  if (mesNum)   tableQs.set("mes",      String(mesNum));
+  if (natureza) tableQs.set("natureza", natureza);
 
-  const [{ data: chartRaw }, { data: tableRaw, count }] = await Promise.all([
-    supabase
-      .from("despesa")
-      .select("mes, natureza, valor_liquido")
-      .eq("parlamentar_id", parlamentar.id)
-      .eq("ano", anoNum)
-      .limit(500),
-    tableQ
-      .order("mes", { ascending: false })
-      .order("valor_liquido", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1),
+  const [chartRaw, tableRes] = await Promise.all([
+    apiFetch<ChartRow[]>(`/parlamentares/${parlamentar.id}/despesas/chart?ano=${anoNum}`, 3600),
+    apiFetch<{ data: Despesa[]; count: number }>(
+      `/parlamentares/${parlamentar.id}/despesas?${tableQs}`,
+      3600,
+    ),
   ]);
 
-  type ChartRow = { mes: number; natureza: string | null; valor_liquido: number | null };
-  const chartData = (chartRaw ?? []) as ChartRow[];
-  const despesas = (tableRaw ?? []) as Despesa[];
-  const total = count ?? 0;
+  const chartData = chartRaw;
+  const despesas  = tableRes.data;
+  const total     = tableRes.count;
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
-  // KPIs (ano inteiro, sem filtro de mes/natureza)
-  const totalGasto = chartData.reduce((s, d) => s + (d.valor_liquido ?? 0), 0);
+  const totalGasto       = chartData.reduce((s, d) => s + (d.valor_liquido ?? 0), 0);
   const totalLancamentos = chartData.length;
-  const maiorDespesa = chartData.reduce((m, d) => Math.max(m, d.valor_liquido ?? 0), 0);
-  const mesesAtivos = new Set(chartData.map((d) => d.mes)).size;
+  const maiorDespesa     = chartData.reduce((m, d) => Math.max(m, d.valor_liquido ?? 0), 0);
+  const mesesAtivos      = new Set(chartData.map((d) => d.mes)).size;
 
-  // Dados do gráfico mensal
   const mesTotais: Record<number, number> = {};
   for (const d of chartData) {
     mesTotais[d.mes] = (mesTotais[d.mes] ?? 0) + (d.valor_liquido ?? 0);
@@ -106,7 +92,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
     mes: Number(m), total: t,
   }));
 
-  // Top 5 categorias
   const catTotais: Record<string, number> = {};
   for (const d of chartData) {
     const key = d.natureza ?? "Outros";
@@ -117,22 +102,20 @@ export default async function GastosParPage({ params, searchParams }: Props) {
     .slice(0, 5)
     .map(([label, t], i) => ({ label, total: t, cor: CORES_CAT[i] ?? "#1351B4" }));
 
-  // Naturezas para o filtro (extraídas dos dados do ano)
   const naturezas = [...new Set(chartData.map((d) => d.natureza).filter(Boolean))].sort() as string[];
 
   const base = `/${casa}/${id}/gastos`;
   const sp: SP = { ano, mes, natureza, pagina };
 
-  // Janela de paginação
   const winStart = Math.max(1, page - 1);
   const winPages: number[] = [];
   for (let i = winStart; i <= Math.min(winStart + 2, totalPages); i++) winPages.push(i);
 
   const kpis = [
-    { label: "Total gasto",    valor: totalGasto > 0 ? formatBRL(totalGasto) : "—",       delta: `ano ${ano}` },
-    { label: "Lançamentos",    valor: totalLancamentos.toLocaleString("pt-BR"),             delta: "registros no período" },
-    { label: "Maior despesa",  valor: maiorDespesa > 0 ? formatBRL(maiorDespesa) : "—",    delta: "em um único lançamento" },
-    { label: "Meses com gasto",valor: mesesAtivos > 0 ? `${mesesAtivos} de 12` : "—",     delta: "meses no ano" },
+    { label: "Total gasto",     valor: totalGasto > 0 ? formatBRL(totalGasto) : "—",    delta: `ano ${ano}` },
+    { label: "Lançamentos",     valor: totalLancamentos.toLocaleString("pt-BR"),          delta: "registros no período" },
+    { label: "Maior despesa",   valor: maiorDespesa > 0 ? formatBRL(maiorDespesa) : "—", delta: "em um único lançamento" },
+    { label: "Meses com gasto", valor: mesesAtivos > 0 ? `${mesesAtivos} de 12` : "—",  delta: "meses no ano" },
   ];
 
   return (
@@ -157,7 +140,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
           </p>
         ) : (
           <>
-            {/* Gráficos */}
             <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-8 mb-10">
               <div>
                 <h2 className="text-[18px] font-extrabold text-text-strong mb-4">
@@ -175,7 +157,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
               )}
             </div>
 
-            {/* Filtros */}
             <form
               method="GET"
               action={`/${casa}/${id}/gastos`}
@@ -219,7 +200,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
               </button>
             </form>
 
-            {/* Cabeçalho da tabela */}
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-[18px] font-extrabold text-text-strong">
                 Lançamentos
@@ -231,9 +211,7 @@ export default async function GastosParPage({ params, searchParams }: Props) {
               </span>
             </div>
 
-            {/* Tabela */}
             <div className="border border-border-base rounded-lg overflow-hidden">
-              {/* Cabeçalho — oculto em mobile */}
               <div className="hidden sm:grid grid-cols-[70px_1.5fr_1.8fr_110px_44px] gap-4 px-4 py-3 bg-surface-alt text-xs font-bold text-text-body uppercase tracking-[0.03em]">
                 <span>Mês</span>
                 <span>Tipo de despesa</span>
@@ -280,7 +258,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
 
                     return (
                       <div key={d.id ?? i}>
-                        {/* Layout mobile — card */}
                         <div className="sm:hidden px-4 py-3">
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1 min-w-0">
@@ -310,7 +287,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
                           </div>
                         </div>
 
-                        {/* Layout desktop — grid */}
                         <div className="hidden sm:grid grid-cols-[70px_1.5fr_1.8fr_110px_44px] gap-4 px-4 py-3 items-start">
                           <span className="text-[13px] text-text-body font-semibold pt-0.5">
                             {MESES_FULL[(d.mes ?? 1) - 1]?.slice(0, 3)}
@@ -340,7 +316,6 @@ export default async function GastosParPage({ params, searchParams }: Props) {
               )}
             </div>
 
-            {/* Paginação */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-5">
                 <span className="text-[13px] text-text-muted">

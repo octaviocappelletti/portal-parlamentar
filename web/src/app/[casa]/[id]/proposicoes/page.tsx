@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { supabase } from "@/lib/db";
+import { apiFetch, apiFetchOptional } from "@/lib/api";
 import ProposicoesAnoChart, { type AnoItem } from "@/components/ProposicoesAnoChart";
 import type { Parlamentar, Proposicao } from "@/types";
 
@@ -29,15 +29,17 @@ function formatData(iso: string | undefined): string {
   });
 }
 
+type LightProp = Pick<Proposicao, "ano" | "tipo" | "aprovada" | "situacao" | "autor_principal">;
+
 type SP = { tipo?: string; status?: string; ano?: string; pagina?: string };
 
 function buildUrl(base: string, sp: SP, overrides: Partial<SP>): string {
   const merged = { ...sp, ...overrides };
   const p = new URLSearchParams();
-  if (merged.tipo)                  p.set("tipo",   merged.tipo);
-  if (merged.status)                p.set("status", merged.status);
-  if (merged.ano)                   p.set("ano",    merged.ano);
-  if (Number(merged.pagina) > 1)    p.set("pagina", String(merged.pagina));
+  if (merged.tipo)               p.set("tipo",   merged.tipo);
+  if (merged.status)             p.set("status", merged.status);
+  if (merged.ano)                p.set("ano",    merged.ano);
+  if (Number(merged.pagina) > 1) p.set("pagina", String(merged.pagina));
   const qs = p.toString();
   return `${base}${qs ? `?${qs}` : ""}`;
 }
@@ -51,55 +53,38 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
   const { casa, id } = await params;
   const { tipo = "", status = "", ano = "", pagina = "1" } = await searchParams;
 
-  const { data: parlamentar } = await supabase
-    .from("parlamentar")
-    .select("id, nome")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single<Pick<Parlamentar, "id" | "nome">>();
-
+  const parlamentar = await apiFetchOptional<Pick<Parlamentar, "id" | "nome">>(
+    `/parlamentares/${casa}/${id}`,
+    3600,
+  );
   if (!parlamentar) notFound();
 
   const page = Math.max(1, parseInt(pagina, 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Dados leves para KPIs e gráfico (todas as proposições do parlamentar)
-  let tableQ = supabase
-    .from("proposicao")
-    .select("*", { count: "exact" })
-    .eq("parlamentar_id", parlamentar.id);
+  const tableQs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+  if (tipo)   tableQs.set("tipo",   tipo);
+  if (status) tableQs.set("status", status);
+  if (ano)    tableQs.set("ano",    ano);
 
-  if (tipo)   tableQ = tableQ.eq("tipo", tipo);
-  if (ano)    tableQ = tableQ.eq("ano", parseInt(ano, 10));
-  if (status === "aprovadas")  tableQ = tableQ.eq("aprovada", true);
-  if (status === "arquivadas") tableQ = tableQ.ilike("situacao", "%arquiv%");
-  if (status === "tramitacao") tableQ = tableQ.eq("aprovada", false).or("situacao.is.null,situacao.not.ilike.%arquiv%");
-
-  type LightProp = Pick<Proposicao, "ano" | "tipo" | "aprovada" | "situacao" | "autor_principal">;
-
-  const [{ data: allRaw }, { data: tableRaw, count }] = await Promise.all([
-    supabase
-      .from("proposicao")
-      .select("ano, tipo, aprovada, situacao, autor_principal")
-      .eq("parlamentar_id", parlamentar.id)
-      .limit(2000),
-    tableQ
-      .order("data_apresentacao", { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1),
+  const [allRaw, tableRes] = await Promise.all([
+    apiFetch<LightProp[]>(`/parlamentares/${parlamentar.id}/proposicoes/sumario`, 3600),
+    apiFetch<{ data: Proposicao[]; count: number }>(
+      `/parlamentares/${parlamentar.id}/proposicoes?${tableQs}`,
+      3600,
+    ),
   ]);
 
-  const allProps = (allRaw ?? []) as LightProp[];
-  const propsPagina = (tableRaw ?? []) as Proposicao[];
-  const total = count ?? 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const allProps      = allRaw;
+  const propsPagina   = tableRes.data;
+  const total         = tableRes.count;
+  const totalPages    = Math.ceil(total / PAGE_SIZE);
 
-  // KPIs (globais — sem filtro)
-  const totalGlobal = allProps.length;
-  const aprovadasGlobal = allProps.filter((p) => p.aprovada).length;
+  const totalGlobal      = allProps.length;
+  const aprovadasGlobal  = allProps.filter((p) => p.aprovada).length;
   const arquivadasGlobal = allProps.filter((p) => /arquiv/i.test(p.situacao ?? "")).length;
   const tramitacaoGlobal = totalGlobal - aprovadasGlobal - arquivadasGlobal;
 
-  // Gráfico: proposições por ano
   const anoCount: Record<number, number> = {};
   for (const p of allProps) {
     if (p.ano) anoCount[p.ano] = (anoCount[p.ano] ?? 0) + 1;
@@ -108,14 +93,12 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
     .sort(([a], [b]) => Number(a) - Number(b))
     .map(([a, t]) => ({ ano: Number(a), total: t }));
 
-  // Anos disponíveis para o filtro (decrescente)
   const anosDisponiveis = [...new Set(allProps.map((p) => p.ano).filter(Boolean))]
     .sort((a, b) => (b ?? 0) - (a ?? 0)) as number[];
 
   const base = `/${casa}/${id}/proposicoes`;
   const sp: SP = { tipo, status, ano, pagina };
 
-  // Janela de paginação
   const winStart = Math.max(1, page - 1);
   const winPages: number[] = [];
   for (let i = winStart; i <= Math.min(winStart + 2, totalPages); i++) winPages.push(i);
@@ -142,7 +125,6 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
       </div>
 
       <div className="max-w-[1180px] mx-auto px-8 py-8">
-        {/* Gráfico por ano */}
         {anoItems.length > 1 && (
           <div className="mb-10">
             <h2 className="text-[18px] font-extrabold text-text-strong mb-4">
@@ -154,7 +136,6 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
           </div>
         )}
 
-        {/* Filtros */}
         <form
           method="GET"
           action={`/${casa}/${id}/proposicoes`}
@@ -199,17 +180,13 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
           </button>
         </form>
 
-        {/* Contagem */}
         <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[18px] font-extrabold text-text-strong">
-            Proposições
-          </h2>
+          <h2 className="text-[18px] font-extrabold text-text-strong">Proposições</h2>
           <span className="text-[13px] text-text-muted">
             {total.toLocaleString("pt-BR")} resultado{total !== 1 ? "s" : ""}
           </span>
         </div>
 
-        {/* Lista */}
         {propsPagina.length === 0 ? (
           <p className="py-16 text-center text-text-muted">
             Nenhuma proposição encontrada para os filtros selecionados.
@@ -223,7 +200,6 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
                 const titulo = `${p.tipo} ${p.numero}/${p.ano}`;
                 return (
                   <div key={p.id} className="border border-border-base rounded-[10px] p-4">
-                    {/* Header do card */}
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <span
                         className="text-[11px] font-bold px-[9px] py-1 rounded-[6px]"
@@ -246,14 +222,12 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
                       </span>
                     </div>
 
-                    {/* Ementa */}
                     {p.ementa && (
                       <p className="text-[13px] text-text-body leading-snug line-clamp-2 mb-3">
                         {p.ementa}
                       </p>
                     )}
 
-                    {/* Rodapé */}
                     {p.url_inteiro_teor && (
                       <a
                         href={p.url_inteiro_teor}
@@ -274,7 +248,6 @@ export default async function ProposicoesParPage({ params, searchParams }: Props
               })}
             </div>
 
-            {/* Paginação */}
             {totalPages > 1 && (
               <div className="flex items-center justify-between pt-6 pb-2">
                 <span className="text-[13px] text-text-muted">

@@ -1,0 +1,16 @@
+services:
+  capivara-api:
+    build: ./api
+    container_name: capivara-api
+    restart: always
+    ports:
+      # Ligado em todas as interfaces para permitir teste por LAN (Etapa 6).
+      # Após Cloudflare Tunnel ativo (Etapa 7), trocar por "127.0.0.1:3001:3001".
+      - "3001:3001"
+    env_file: ./api/.env
+    networks:
+      - capivara-db_default
+
+networks:
+  capivara-db_default:
+    external: true   # rede onde capivara-db já está rodando

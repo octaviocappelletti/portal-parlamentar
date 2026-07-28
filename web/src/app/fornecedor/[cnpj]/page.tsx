@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db";
+import { apiFetch, apiFetchOptional } from "@/lib/api";
 import type { Fornecedor, FornecedorSocio, Parlamentar } from "@/types";
 import ParlamentaresFornecedor, {
   type DespesaLinha,
@@ -73,14 +73,8 @@ interface Props {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { cnpj } = await params;
-  const { data } = await supabase
-    .from("despesa")
-    .select("fornecedor")
-    .eq("cnpj_normalizado", cnpj)
-    .not("fornecedor", "is", null)
-    .limit(1)
-    .single();
-  return { title: data?.fornecedor ?? formatCnpj(cnpj) };
+  const info = await apiFetchOptional<{ razao_social?: string }>(`/fornecedor/${cnpj}`, 86400);
+  return { title: info?.razao_social ?? formatCnpj(cnpj) };
 }
 
 interface DespesaRow {
@@ -102,39 +96,17 @@ export default async function FornecedorPage({ params }: Props) {
 
   if (!/^\d{14}$/.test(cnpj)) notFound();
 
-  const [
-    { data: despesasRaw, error: errDespesas },
-    { data: infoReceita },
-    { data: sociosRaw, error: errSocios },
-  ] = await Promise.all([
-    supabase
-      .from("despesa")
-      .select(
-        "id, parlamentar_id, ano, mes, valor_liquido, valor_glosa, natureza, detalhamento, url_documento, fornecedor, parlamentar(id, id_externo, nome, partido, uf, casa, foto_url)"
-      )
-      .eq("cnpj_normalizado", cnpj),
-    supabase
-      .from("fornecedor")
-      .select("*")
-      .eq("cnpj", cnpj)
-      .maybeSingle<Fornecedor>(),
-    supabase
-      .from("fornecedor_socio")
-      .select("*")
-      .eq("fornecedor_cnpj", cnpj)
-      .order("data_entrada_sociedade")
-      .returns<FornecedorSocio[]>(),
+  const [despesasRaw, infoReceita, sociosRaw] = await Promise.all([
+    apiFetch<DespesaRow[]>(`/fornecedor/${cnpj}/despesas`, 86400),
+    apiFetchOptional<Fornecedor>(`/fornecedor/${cnpj}`, 86400),
+    apiFetch<FornecedorSocio[]>(`/fornecedor/${cnpj}/socios`, 86400),
   ]);
 
-  if (errDespesas) throw new Error(errDespesas.message);
-  if (!despesasRaw?.length) notFound();
+  if (!despesasRaw.length) notFound();
 
-  // fornecedor_socio pode ainda não existir no banco — falha silenciosa
-  const socios: FornecedorSocio[] = errSocios ? [] : (sociosRaw ?? []);
+  const despesas = despesasRaw;
+  const socios   = sociosRaw;
 
-  const despesas = despesasRaw as unknown as DespesaRow[];
-
-  // Prefere razao_social da Receita Federal como nome canônico
   const nomeCeap = despesas.find((d) => d.fornecedor)?.fornecedor ?? formatCnpj(cnpj);
   const nomePrincipal = infoReceita?.razao_social ?? nomeCeap;
   const nomeFantasia =
@@ -142,10 +114,8 @@ export default async function FornecedorPage({ params }: Props) {
       ? infoReceita.nome_fantasia
       : null;
 
-  // Totais
   const totalRecebido = despesas.reduce((s, d) => s + (d.valor_liquido ?? 0), 0);
 
-  // Agrupamento por parlamentar
   const porParlamentar = new Map<number, ParlamentarGrupo>();
   for (const d of despesas) {
     if (!d.parlamentar) continue;
@@ -171,7 +141,6 @@ export default async function FornecedorPage({ params }: Props) {
   }
   const grupos = [...porParlamentar.values()].sort((a, b) => b.total - a.total);
 
-  // Histórico por ano
   const porAno = new Map<number, number>();
   for (const d of despesas) {
     porAno.set(d.ano, (porAno.get(d.ano) ?? 0) + (d.valor_liquido ?? 0));
@@ -179,7 +148,6 @@ export default async function FornecedorPage({ params }: Props) {
   const anos = [...porAno.entries()].sort((a, b) => b[0] - a[0]);
   const maiorAno = anos.length > 0 ? Math.max(...anos.map(([, v]) => v)) : 1;
 
-  // Lookups para badges e seções de detalhe
   const situacao = infoReceita?.situacao_cadastral
     ? (SITUACAO_CADASTRAL[infoReceita.situacao_cadastral] ?? null)
     : null;
@@ -262,21 +230,15 @@ export default async function FornecedorPage({ params }: Props) {
       {/* Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
         <div className="card p-4">
-          <p className="section-label mb-1">
-            Total recebido
-          </p>
+          <p className="section-label mb-1">Total recebido</p>
           <p className="text-xl font-bold text-slate-900">{BRL0.format(totalRecebido)}</p>
         </div>
         <div className="card p-4">
-          <p className="section-label mb-1">
-            Parlamentares
-          </p>
+          <p className="section-label mb-1">Parlamentares</p>
           <p className="text-xl font-bold text-slate-900">{grupos.length}</p>
         </div>
         <div className="card p-4">
-          <p className="section-label mb-1">
-            Lançamentos
-          </p>
+          <p className="section-label mb-1">Lançamentos</p>
           <p className="text-xl font-bold text-slate-900">{despesas.length}</p>
         </div>
       </div>
@@ -284,12 +246,9 @@ export default async function FornecedorPage({ params }: Props) {
       {/* Dados da Receita Federal */}
       {infoReceita && (
         <>
-          {/* Situação + Classificação */}
           <div className="grid sm:grid-cols-2 gap-4 mb-4">
             <div className="card p-5">
-              <p className="section-label mb-3">
-                Situação
-              </p>
+              <p className="section-label mb-3">Situação</p>
               <dl className="space-y-3">
                 {situacao && (
                   <div>
@@ -299,9 +258,7 @@ export default async function FornecedorPage({ params }: Props) {
                       {infoReceita.data_situacao_cadastral && (
                         <span className="text-xs text-slate-500 ml-2">
                           desde{" "}
-                          {new Date(infoReceita.data_situacao_cadastral).toLocaleDateString(
-                            "pt-BR"
-                          )}
+                          {new Date(infoReceita.data_situacao_cadastral).toLocaleDateString("pt-BR")}
                         </span>
                       )}
                       {infoReceita.motivo_situacao_cadastral && (
@@ -335,9 +292,7 @@ export default async function FornecedorPage({ params }: Props) {
             </div>
 
             <div className="card p-5">
-              <p className="section-label mb-3">
-                Classificação
-              </p>
+              <p className="section-label mb-3">Classificação</p>
               <dl className="space-y-3">
                 {(infoReceita.natureza_juridica_descricao ||
                   infoReceita.natureza_juridica_codigo) && (
@@ -371,12 +326,9 @@ export default async function FornecedorPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Endereço */}
           {temEndereco && (
             <div className="card p-5 mb-4">
-              <p className="section-label mb-2">
-                Endereço
-              </p>
+              <p className="section-label mb-2">Endereço</p>
               <p className="text-sm text-slate-700">
                 {[infoReceita.logradouro, infoReceita.numero].filter(Boolean).join(", ")}
                 {infoReceita.bairro ? ` — ${infoReceita.bairro}` : ""}
@@ -388,12 +340,9 @@ export default async function FornecedorPage({ params }: Props) {
             </div>
           )}
 
-          {/* CNAEs */}
           {temCnaes && (
             <div className="card p-5 mb-4">
-              <p className="section-label mb-3">
-                Atividades (CNAE)
-              </p>
+              <p className="section-label mb-3">Atividades (CNAE)</p>
               <div className="space-y-2">
                 {infoReceita.cnae_principal && (
                   <div className="flex items-baseline gap-3">
@@ -427,7 +376,6 @@ export default async function FornecedorPage({ params }: Props) {
             </div>
           )}
 
-          {/* Rodapé Receita */}
           {infoReceita.enriched_at && (
             <p className="text-xs text-slate-500 text-right mt-1 mb-8">
               Dados da Receita Federal atualizados em{" "}
@@ -437,30 +385,19 @@ export default async function FornecedorPage({ params }: Props) {
         </>
       )}
 
-      {/* Quadro societário */}
       {socios.length > 0 && (
         <div className="card overflow-hidden mb-6">
           <div className="px-5 py-4 border-b border-slate-100">
-            <p className="section-label">
-              Quadro societário ({socios.length})
-            </p>
+            <p className="section-label">Quadro societário ({socios.length})</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">
-                    Sócio
-                  </th>
-                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold hidden sm:table-cell">
-                    Qualificação
-                  </th>
-                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold hidden sm:table-cell">
-                    Entrada
-                  </th>
-                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold hidden md:table-cell">
-                    Faixa etária
-                  </th>
+                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold">Sócio</th>
+                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold hidden sm:table-cell">Qualificação</th>
+                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold hidden sm:table-cell">Entrada</th>
+                  <th className="text-left px-4 py-2.5 text-xs text-slate-500 font-semibold hidden md:table-cell">Faixa etária</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -491,11 +428,8 @@ export default async function FornecedorPage({ params }: Props) {
         </div>
       )}
 
-      {/* Histórico por ano */}
       <div className="card p-5 mb-6">
-        <p className="section-label mb-4">
-          Histórico por ano
-        </p>
+        <p className="section-label mb-4">Histórico por ano</p>
         <div className="space-y-2.5">
           {anos.map(([ano, total]) => {
             const pct = Math.round((total / maiorAno) * 100);
@@ -517,7 +451,6 @@ export default async function FornecedorPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Acordeão de parlamentares */}
       <ParlamentaresFornecedor grupos={grupos} />
 
       <p className="text-xs text-slate-500 text-center pt-6">

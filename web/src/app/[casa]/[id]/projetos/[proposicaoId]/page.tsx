@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/db";
+import { apiFetchOptional } from "@/lib/api";
 import type { Proposicao } from "@/types";
 import { notFound } from "next/navigation";
 
@@ -28,12 +28,7 @@ function resolveStatus(p: Proposicao): string {
 export default async function ProposicaoPage({ params }: Props) {
   const { casa, proposicaoId } = await params;
 
-  const { data: proposicao } = await supabase
-    .from("proposicao")
-    .select("*")
-    .eq("id", Number(proposicaoId))
-    .single<Proposicao>();
-
+  const proposicao = await apiFetchOptional<Proposicao>(`/proposicoes/${proposicaoId}`, 86400);
   if (!proposicao) notFound();
 
   const statusStr = resolveStatus(proposicao);

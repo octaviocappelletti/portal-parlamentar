@@ -1,6 +1,5 @@
 "use client";
 
-import { supabase } from "@/lib/db";
 import type { Casa, Despesa, DespesaResumoAno } from "@/types";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -82,16 +81,17 @@ export default function TabelaCotas({
     setOpenMonths(anoSel === ANO_ATUAL ? new Set([MES_ATUAL]) : new Set());
     prevAno.current = anoSel;
 
-    supabase
-      .from("despesa")
-      .select("*")
-      .eq("parlamentar_id", parlamentarDbId)
-      .eq("ano", anoSel)
-      .order("mes", { ascending: false })
-      .order("valor_liquido", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) { setErro(error.message); setLoading(false); return; }
-        setDespesas((data as Despesa[]) ?? []);
+    fetch(`/api/despesas?parlamentarId=${parlamentarDbId}&ano=${anoSel}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json() as Promise<Despesa[]>;
+      })
+      .then((data) => {
+        setDespesas(data ?? []);
+        setLoading(false);
+      })
+      .catch((err: Error) => {
+        setErro(err.message);
         setLoading(false);
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,6 +1,2 @@
-import { createClient } from "@supabase/supabase-js";
-
-const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-export const supabase = createClient(url, key);
+// Migrado para src/lib/api.ts — este módulo não é mais usado.
+export const supabase = null as never;

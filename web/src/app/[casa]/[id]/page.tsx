@@ -1,18 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { supabase } from "@/lib/db";
+import { apiFetch, apiFetchOptional } from "@/lib/api";
 import GastosChart, { type GastoItem } from "@/components/GastosChart";
 import type { Parlamentar, Proposicao } from "@/types";
 
 export const revalidate = 3600;
 
 const CORES_GASTO = ["#1351B4", "#1351B4", "#168821", "#168821", "#FFCD07"];
-
-function dateFrom12MonthsAgo(): string {
-  const d = new Date();
-  d.setFullYear(d.getFullYear() - 1);
-  return d.toISOString().slice(0, 10);
-}
 
 const STATUS_BADGE: Record<string, string> = {
   Aprovado:        "bg-green-bg text-brand-green",
@@ -46,6 +40,10 @@ function formatData(p: Proposicao): string {
   });
 }
 
+type ChartRow = { mes: number; natureza: string | null; valor_liquido: number | null };
+type ResumoRow = { total: number; lancamentos: number } | null;
+type PresencaResponse = { total: number; presente: number; data: unknown[]; count: number };
+
 type Props = {
   params: Promise<{ casa: string; id: string }>;
 };
@@ -53,90 +51,32 @@ type Props = {
 export default async function DetalhePage({ params }: Props) {
   const { casa, id } = await params;
 
-  const { data: parlamentar } = await supabase
-    .from("parlamentar")
-    .select("id")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single<Pick<Parlamentar, "id">>();
-
+  const parlamentar = await apiFetchOptional<Parlamentar>(`/parlamentares/${casa}/${id}`, 3600);
   if (!parlamentar) notFound();
 
   const ANO = 2025;
-  const dataFrom = dateFrom12MonthsAgo();
+  const dbId = parlamentar.id;
 
-  // Queries de presença: usa id_externo (= id da URL) diretamente nas tabelas de voto
-  const [presencaTotal, presencaPresente] = await (async () => {
-    if (casa === "camara") {
-      const [{ count: total }, { count: presente }] = await Promise.all([
-        supabase
-          .from("voto_camara_enriquecido")
-          .select("*", { count: "exact", head: true })
-          .eq("id_deputado", Number(id))
-          .gte("data_hora", dataFrom),
-        supabase
-          .from("voto_camara_enriquecido")
-          .select("*", { count: "exact", head: true })
-          .eq("id_deputado", Number(id))
-          .eq("status_presenca", "presente_votou")
-          .gte("data_hora", dataFrom),
-      ]);
-      return [total ?? 0, presente ?? 0];
-    } else {
-      const [{ count: total }, { count: presente }] = await Promise.all([
-        supabase
-          .from("voto_senado_enriquecido")
-          .select("*", { count: "exact", head: true })
-          .eq("codigo_parlamentar", Number(id))
-          .gte("data_sessao", dataFrom),
-        supabase
-          .from("voto_senado_enriquecido")
-          .select("*", { count: "exact", head: true })
-          .eq("codigo_parlamentar", Number(id))
-          .in("categoria_presenca", ["presente_votou", "presente_sem_voto"])
-          .gte("data_sessao", dataFrom),
-      ]);
-      return [total ?? 0, presente ?? 0];
-    }
-  })();
+  const [presenca, propsRes, despesasCat, resumo] = await Promise.all([
+    apiFetch<PresencaResponse>(`/parlamentares/${casa}/${id}/presenca?limit=0`, 3600),
+    apiFetch<{ data: Proposicao[]; count: number }>(`/parlamentares/${dbId}/proposicoes?limit=3`, 3600),
+    apiFetch<ChartRow[]>(`/parlamentares/${dbId}/despesas/chart?ano=${ANO}`, 3600),
+    apiFetchOptional<ResumoRow>(`/parlamentares/${dbId}/despesas/resumo?ano=${ANO}`, 3600),
+  ]);
 
+  const presencaTotal   = presenca.total;
+  const presencaPresente = presenca.presente;
   const presencaPct =
     presencaTotal > 0 ? Math.round((presencaPresente / presencaTotal) * 100) : null;
 
-  const [
-    { data: proposicoes },
-    { data: despesasCat },
-    { data: resumo },
-    { count: totalProps },
-  ] = await Promise.all([
-    supabase
-      .from("proposicao")
-      .select("*")
-      .eq("parlamentar_id", parlamentar.id)
-      .order("data_apresentacao", { ascending: false })
-      .limit(3),
-    supabase
-      .from("despesa")
-      .select("natureza, valor_liquido")
-      .eq("parlamentar_id", parlamentar.id)
-      .eq("ano", ANO),
-    supabase
-      .from("despesa_resumo_ano")
-      .select("total")
-      .eq("parlamentar_id", parlamentar.id)
-      .eq("ano", ANO)
-      .maybeSingle(),
-    supabase
-      .from("proposicao")
-      .select("*", { count: "exact", head: true })
-      .eq("parlamentar_id", parlamentar.id),
-  ]);
+  const totalProps = propsRes.count;
+  const proposicoes = propsRes.data;
 
-  // Gastos por categoria (agrupados em JS)
+  // Gastos por categoria
   const catMap: Record<string, number> = {};
-  for (const d of despesasCat ?? []) {
-    const key = (d as { natureza?: string; valor_liquido?: number }).natureza ?? "Outros";
-    catMap[key] = (catMap[key] ?? 0) + ((d as { valor_liquido?: number }).valor_liquido ?? 0);
+  for (const d of despesasCat) {
+    const key = d.natureza ?? "Outros";
+    catMap[key] = (catMap[key] ?? 0) + (d.valor_liquido ?? 0);
   }
   const gastosOrdenados = Object.entries(catMap)
     .sort(([, a], [, b]) => b - a)
@@ -148,8 +88,8 @@ export default async function DetalhePage({ params }: Props) {
     cor: CORES_GASTO[i] ?? "#1351B4",
   }));
 
-  const totalGasto = (resumo as { total?: number } | null)?.total ?? 0;
-  const aprovadas = (proposicoes ?? []).filter((p: Proposicao) => p.aprovada).length;
+  const totalGasto = resumo?.total ?? 0;
+  const aprovadas = proposicoes.filter((p: Proposicao) => p.aprovada).length;
 
   const kpis = [
     {
@@ -181,7 +121,7 @@ export default async function DetalhePage({ params }: Props) {
     },
   ];
 
-  const propsExibidas = (proposicoes ?? []).slice(0, 3).map((p: Proposicao) => ({
+  const propsExibidas = proposicoes.slice(0, 3).map((p: Proposicao) => ({
     titulo: `${p.tipo} ${p.numero}/${p.ano}${p.ementa ? ` — ${p.ementa.slice(0, 80)}${p.ementa.length > 80 ? "…" : ""}` : ""}`,
     status: mapStatus(p),
     data: formatData(p),

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { supabase } from "@/lib/db";
+import { apiFetch } from "@/lib/api";
 
 export const revalidate = 3600;
 
@@ -88,69 +88,30 @@ export default async function ProposicoesPage({ searchParams }: Props) {
   const page = Math.max(1, parseInt(pagina, 10) || 1);
   const offset = (page - 1) * PAGE_SIZE;
 
-  // Query de proposições (sem join — evita timeout em tabelas grandes)
-  // count: "planned" usa EXPLAIN para estimativa em vez de full table scan
-  let query = supabase
-    .from("proposicao")
-    .select("id, tipo, numero, ano, ementa, aprovada, situacao, data_apresentacao, casa, parlamentar_id", { count: "planned" });
+  const qs = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset) });
+  if (q)      qs.set("q",      q);
+  if (status) qs.set("status", status);
+  if (tipo)   qs.set("tipo",   tipo);
+  if (ano)    qs.set("ano",    ano);
+  if (casa)   qs.set("casa",   casa);
 
-  if (q)    query = query.ilike("ementa", `%${q}%`);
-  if (tipo) query = query.eq("tipo", tipo);
-  if (ano)  query = query.eq("ano", parseInt(ano, 10));
-  if (casa) query = query.eq("casa", casa);
+  const { data: proposicoes, count } = await apiFetch<{
+    data: ProposicaoRow[];
+    count: number;
+  }>(`/proposicoes?${qs}`, 3600);
 
-  if (status === "aprovadas")  query = query.eq("aprovada", true);
-  if (status === "arquivadas") query = query.ilike("situacao", "%arquiv%");
-  // or() inclui situacao=null (não arquivada) e situacao NOT ilike '%arquiv%'
-  if (status === "tramitacao") query = query.eq("aprovada", false).or("situacao.is.null,situacao.not.ilike.%arquiv%");
-
-  const { data: propRows, count } = await query
-    .order("data_apresentacao", { ascending: false })
-    .range(offset, offset + PAGE_SIZE - 1);
-
-  const propBase = (propRows ?? []) as {
-    id: number; tipo: string; numero: number; ano: number;
-    ementa: string | null; aprovada: boolean | null;
-    situacao: string | null; data_apresentacao: string | null;
-    casa: string; parlamentar_id: number;
-  }[];
-
-  const total = count ?? 0;
+  const total      = count;
   const totalPages = Math.ceil(total / PAGE_SIZE);
-
-  // Query de parlamentares para esta página (2ª query separada — eficiente)
-  const parlIds = [...new Set(propBase.map((p) => p.parlamentar_id))];
-  const { data: parlRows } = parlIds.length
-    ? await supabase
-        .from("parlamentar")
-        .select("id, nome, partido, uf, casa, id_externo")
-        .in("id", parlIds)
-    : { data: [] };
-
-  const parlMap = new Map(
-    (parlRows ?? []).map((p: { id: number; nome: string; partido: string | null; uf: string | null; casa: string; id_externo: number }) => [
-      p.id,
-      p,
-    ]),
-  );
-
-  // Monta o tipo final com autor resolvido
-  const proposicoes: ProposicaoRow[] = propBase.map((p) => ({
-    ...p,
-    parlamentar: parlMap.get(p.parlamentar_id) ?? null,
-  }));
 
   const sp: SP = { q, status, tipo, ano, casa, pagina };
 
-  // Chips de filtros ativos
   const chips: { label: string; url: string }[] = [];
-  if (q)      chips.push({ label: `"${q}"`,                                  url: buildUrl(sp, { q: "", pagina: "1" }) });
-  if (status) chips.push({ label: STATUS_LABELS[status] ?? status,           url: buildUrl(sp, { status: "", pagina: "1" }) });
-  if (tipo)   chips.push({ label: tipo,                                       url: buildUrl(sp, { tipo: "", pagina: "1" }) });
-  if (ano)    chips.push({ label: ano,                                        url: buildUrl(sp, { ano: "", pagina: "1" }) });
-  if (casa)   chips.push({ label: casa === "camara" ? "Câmara" : "Senado",   url: buildUrl(sp, { casa: "", pagina: "1" }) });
+  if (q)      chips.push({ label: `"${q}"`,                                url: buildUrl(sp, { q: "", pagina: "1" }) });
+  if (status) chips.push({ label: STATUS_LABELS[status] ?? status,         url: buildUrl(sp, { status: "", pagina: "1" }) });
+  if (tipo)   chips.push({ label: tipo,                                     url: buildUrl(sp, { tipo: "", pagina: "1" }) });
+  if (ano)    chips.push({ label: ano,                                      url: buildUrl(sp, { ano: "", pagina: "1" }) });
+  if (casa)   chips.push({ label: casa === "camara" ? "Câmara" : "Senado", url: buildUrl(sp, { casa: "", pagina: "1" }) });
 
-  // Paginação
   const winStart = Math.max(1, page - 1);
   const winPages: number[] = [];
   for (let i = winStart; i <= Math.min(winStart + 2, totalPages); i++) {
@@ -169,7 +130,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
       </div>
 
       <div className="max-w-[1180px] mx-auto px-8">
-        {/* Título */}
         <div className="pt-8 pb-[22px]">
           <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong mb-2">
             Proposições legislativas
@@ -180,9 +140,7 @@ export default async function ProposicoesPage({ searchParams }: Props) {
           </p>
         </div>
 
-        {/* Toolbar de filtros */}
         <form method="GET" action="/proposicoes" className="flex gap-3 flex-wrap pb-[22px] items-center">
-          {/* Busca na ementa */}
           <div className="flex-1 min-w-[260px] flex items-center bg-white border-[1.5px] border-border-input rounded-lg overflow-hidden">
             <input
               type="text"
@@ -199,7 +157,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
             </span>
           </div>
 
-          {/* Status */}
           <select
             name="status"
             defaultValue={status}
@@ -211,7 +168,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
             <option value="arquivadas">Arquivadas</option>
           </select>
 
-          {/* Tipo */}
           <select
             name="tipo"
             defaultValue={tipo}
@@ -221,7 +177,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
             {TIPOS.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
 
-          {/* Ano */}
           <select
             name="ano"
             defaultValue={ano}
@@ -233,7 +188,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
             ))}
           </select>
 
-          {/* Casa */}
           <select
             name="casa"
             defaultValue={casa}
@@ -252,7 +206,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
           </button>
         </form>
 
-        {/* Chips de filtros ativos + contagem */}
         <div className="flex items-center gap-2 flex-wrap pb-5 min-h-[28px]">
           {chips.length > 0 && (
             <span className="text-[13px] text-text-muted font-semibold">Filtros ativos:</span>
@@ -273,7 +226,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
           </span>
         </div>
 
-        {/* Lista de proposições */}
         {proposicoes.length === 0 ? (
           <p className="py-16 text-center text-text-muted">
             Nenhuma proposição encontrada para os filtros selecionados.
@@ -294,7 +246,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
                   className="border border-border-base rounded-xl p-5 hover:shadow-sm transition-shadow"
                 >
                   <div className="flex gap-5 items-start">
-                    {/* Conteúdo principal */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap mb-2">
                         <span
@@ -322,7 +273,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
                       )}
                     </div>
 
-                    {/* Mini-card do autor */}
                     {autor && (
                       <Link
                         href={autorUrl!}
@@ -348,7 +298,6 @@ export default async function ProposicoesPage({ searchParams }: Props) {
           </div>
         )}
 
-        {/* Paginação */}
         {totalPages > 1 && (
           <div className="flex items-center justify-between pt-5 pb-8">
             <span className="text-[13px] text-text-muted">

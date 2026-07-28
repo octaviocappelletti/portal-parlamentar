@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
-import { supabase } from "@/lib/db";
+import { apiFetch, apiFetchOptional } from "@/lib/api";
 import AvatarFoto from "@/components/AvatarFoto";
 import TabsNav from "@/components/TabsNav";
 import RedesSociais from "@/components/RedesSociais";
@@ -22,7 +22,6 @@ function iniciais(nome: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-// Ordenação por importância do cargo no órgão
 const TITULO_PRIORIDADE: Record<string, number> = {
   "Presidente":         1,
   "1º Vice-Presidente": 2,
@@ -59,13 +58,8 @@ export async function generateMetadata({
   params: Promise<{ casa: string; id: string }>;
 }): Promise<Metadata> {
   const { casa, id } = await params;
-  const { data } = await supabase
-    .from("parlamentar")
-    .select("nome")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single();
-  return { title: (data as { nome?: string } | null)?.nome ?? "Parlamentar" };
+  const parl = await apiFetchOptional<{ nome: string }>(`/parlamentares/${casa}/${id}`, 86400);
+  return { title: parl?.nome ?? "Parlamentar" };
 }
 
 export default async function ParlamentarLayout({ params, children }: LayoutProps) {
@@ -75,22 +69,12 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
   const casaKey = casa as Casa;
   const { label, cargo } = CASAS[casaKey];
 
-  const { data: parlamentar } = await supabase
-    .from("parlamentar")
-    .select("*")
-    .eq("casa", casa)
-    .eq("id_externo", Number(id))
-    .single<Parlamentar>();
+  const [parlamentar, orgaos] = await Promise.all([
+    apiFetchOptional<Parlamentar>(`/parlamentares/${casa}/${id}`, 86400),
+    apiFetch<ParlamentarOrgao[]>(`/parlamentares/${casa}/${id}/orgaos`, 86400),
+  ]);
 
   if (!parlamentar) notFound();
-
-  // Órgãos ativos — Câmara e Senado
-  const { data: orgaosData } = await supabase
-    .from("parlamentar_orgao_ativo")
-    .select("id_orgao, nome_orgao, sigla_orgao, titulo")
-    .eq("parlamentar_id", parlamentar.id);
-
-  const orgaos: ParlamentarOrgao[] = (orgaosData as ParlamentarOrgao[] | null) ?? [];
 
   const orgaosOrdenados = [...orgaos].sort(
     (a, b) => prioridadeTitulo(a.titulo) - prioridadeTitulo(b.titulo)
@@ -136,7 +120,6 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
       <div className="max-w-[1180px] mx-auto px-4 sm:px-8 pt-7 sm:pt-9">
         <div className="flex flex-col sm:flex-row gap-5 sm:gap-7 sm:items-start">
 
-          {/* Mobile: avatar + nome lado a lado; Desktop: avatar isolado (sm:contents dissolve o wrapper) */}
           <div className="flex items-center gap-4 sm:contents">
             <AvatarFoto
               url={parlamentar.foto_url}
@@ -146,7 +129,6 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
               fontSize={34}
             />
 
-            {/* Nome visível apenas no mobile (ao lado do avatar) */}
             <div className="flex-1 sm:hidden">
               <div className="flex items-center gap-2 flex-wrap mb-1">
                 <h1 className="text-[22px] font-extrabold tracking-tight text-text-strong leading-tight">
@@ -159,7 +141,6 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
             </div>
           </div>
 
-          {/* Nome + redes visíveis apenas no desktop */}
           <div className="flex-1 hidden sm:block">
             <div className="flex items-center gap-3 flex-wrap">
               <h1 className="text-[30px] font-extrabold tracking-tight text-text-strong">
@@ -171,7 +152,6 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
             {redesEl}
           </div>
 
-          {/* Botões: linha no mobile, coluna no desktop */}
           <div className="flex gap-2 sm:flex-col sm:gap-2.5 shrink-0">
             <button className="flex-1 sm:flex-none bg-brand-blue text-white px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-[#0d3d96] transition-colors">
               Criar alerta
@@ -182,7 +162,6 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
           </div>
         </div>
 
-        {/* Cargos e comissões */}
         {orgaosOrdenados.length > 0 && (
           <div className="mt-5 flex flex-col gap-2">
             <p className="text-[12px] font-bold text-text-muted uppercase tracking-wide">

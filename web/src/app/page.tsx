@@ -1,7 +1,7 @@
 import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
 import GastosChart from "@/components/GastosChart";
-import { supabase } from "@/lib/db";
+import { apiFetch } from "@/lib/api";
 import { MOCK_GASTOS_HOME } from "@/lib/mock";
 
 export const revalidate = 3600;
@@ -17,38 +17,21 @@ const NUM_COMPACT = new Intl.NumberFormat("pt-BR", {
   maximumFractionDigits: 1,
 });
 
+type StatsResponse = {
+  total_camara: number;
+  total_senado: number;
+  total_proposicoes: number;
+  total_gasto: number;
+};
+
 async function fetchStats() {
-  const [
-    { count: totalCamara },
-    { count: totalSenado },
-    { count: totalProps },
-    { data: gastoView, error: gastoErr },
-  ] = await Promise.all([
-    supabase
-      .from("parlamentar")
-      .select("*", { count: "exact", head: true })
-      .eq("casa", "camara")
-      .eq("situacao", "Exercício"),
-    supabase
-      .from("parlamentar")
-      .select("*", { count: "exact", head: true })
-      .eq("casa", "senado"),
-    supabase.from("proposicao").select("*", { count: "exact", head: true }),
-    supabase.from("despesa_totais").select("total_geral").single(),
-  ]);
-
-  let totalGasto: number =
-    (gastoView as { total_geral: number } | null)?.total_geral ?? 0;
-
-  if (gastoErr) {
-    const { data: rows } = await supabase.from("despesa").select("valor_liquido");
-    totalGasto = (rows ?? []).reduce(
-      (s: number, r: { valor_liquido: number | null }) => s + (r.valor_liquido ?? 0),
-      0,
-    );
-  }
-
-  return { totalCamara, totalSenado, totalProps, totalGasto };
+  const data = await apiFetch<StatsResponse>("/stats", 3600);
+  return {
+    totalCamara: data.total_camara,
+    totalSenado: data.total_senado,
+    totalProps:  data.total_proposicoes,
+    totalGasto:  data.total_gasto,
+  };
 }
 
 const COMO_FUNCIONA = [
