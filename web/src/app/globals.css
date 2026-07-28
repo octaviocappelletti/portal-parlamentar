@@ -2,6 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─── Tokens de cor (CSS custom properties) ─── */
+:root {
+  --color-brand-blue:      #1351B4;
+  --color-brand-blue-dark: #071d41;
+  --color-brand-green:     #168821;
+  --color-brand-yellow:    #FFCD07;
+  --color-danger:          #c0392b;
+  --color-blue-bg:         #e8f0fb;
+  --color-green-bg:        #e7f4ea;
+  --color-yellow-bg:       #fdf3cd;
+  --color-yellow-text:     #8a6d00;
+  --color-text-strong:     #1c2733;
+  --color-text-body:       #54606e;
+  --color-text-muted:      #7a8798;
+  --color-border-base:     #e4e9f0;
+  --color-border-input:    #d3dae4;
+  --color-track:           #eef2f7;
+  --color-surface-alt:     #f4f7fc;
+  --color-page-bg:         #e9edf3;
+  --font-scale:            1;
+}
+
+/* ─── Alto contraste ─── */
+html.contrast-alto {
+  --color-brand-blue:      #6bb3ff;
+  --color-brand-blue-dark: #000000;
+  --color-brand-green:     #4dff91;
+  --color-brand-yellow:    #ffd700;
+  --color-danger:          #ff7070;
+  --color-blue-bg:         #001a33;
+  --color-green-bg:        #001a0a;
+  --color-yellow-bg:       #1a1400;
+  --color-yellow-text:     #ffd700;
+  --color-text-strong:     #ffffff;
+  --color-text-body:       #e0e0e0;
+  --color-text-muted:      #aaaaaa;
+  --color-border-base:     #555555;
+  --color-border-input:    #777777;
+  --color-track:           #222222;
+  --color-surface-alt:     #111111;
+  --color-page-bg:         #0a0a0a;
+}
+
+html.contrast-alto body {
+  background-color: #000 !important;
+}
+
+/* bg-white e gradientes não são tokens customizados — override direto */
+html.contrast-alto [class~="bg-white"],
+html.contrast-alto .card {
+  background-color: #111 !important;
+}
+
+html.contrast-alto [class~="to-white"] {
+  --tw-gradient-to: #000 !important;
+}
+
+html.contrast-alto [class*="text-slate-"] {
+  color: #ccc !important;
+}
+
+html.contrast-alto .badge-gray {
+  background-color: #333 !important;
+  color: #ccc !important;
+}
+
 /* Respect user's motion preference */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -14,6 +80,7 @@
 
 @layer base {
   html {
+    font-size: calc(16px * var(--font-scale, 1));
     font-optical-sizing: auto;
     font-kerning: normal;
   }
