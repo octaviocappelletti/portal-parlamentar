@@ -99,12 +99,12 @@ export default async function PresencaPage({ params, searchParams }: Props) {
     );
   }
 
-  const kpiRows = [
+  const kpiRows: { label: string; valor: string; delta: string; pos?: boolean }[] = [
     { label: "Votações nominais", valor: total.toLocaleString("pt-BR"),    delta: "últimos 12 meses" },
     { label: "Presente",          valor: presente.toLocaleString("pt-BR"), delta: casa === "camara" ? "votações com voto registrado" : "votou ou estava presente", pos: true },
     { label: "Ausente",           valor: ausente.toLocaleString("pt-BR"),  delta: casa === "camara" ? "sem voto registrado" : "justificado ou não" },
     { label: "% Presença",        valor: pct !== null ? `${pct}%` : "—",   delta: "votações nominais", pos: pct !== null && pct >= 75 },
-  ] as const;
+  ];
 
   return (
     <>
