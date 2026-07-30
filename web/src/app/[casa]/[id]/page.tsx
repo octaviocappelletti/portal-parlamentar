@@ -48,8 +48,12 @@ type Props = {
   params: Promise<{ casa: string; id: string }>;
 };
 
+const CASAS_VALIDAS = new Set(["camara", "senado"]);
+
 export default async function DetalhePage({ params }: Props) {
   const { casa, id } = await params;
+
+  if (!CASAS_VALIDAS.has(casa) || !/^\d{1,10}$/.test(id)) notFound();
 
   const parlamentar = await apiFetchOptional<Parlamentar>(`/parlamentares/${casa}/${id}`, 3600);
   if (!parlamentar) notFound();
@@ -57,12 +61,23 @@ export default async function DetalhePage({ params }: Props) {
   const ANO = new Date().getFullYear();
   const dbId = parlamentar.id;
 
-  const [presenca, propsRes, despesasCat, resumo] = await Promise.all([
+  const [presenca, propsRes, despesasCat, resumo, todosParl] = await Promise.all([
     apiFetch<PresencaResponse>(`/parlamentares/${casa}/${id}/presenca?limit=0`, 3600),
     apiFetch<{ data: Proposicao[]; count: number }>(`/parlamentares/${dbId}/proposicoes?limit=3`, 3600),
     apiFetch<ChartRow[]>(`/parlamentares/${dbId}/despesas/chart?ano=${ANO}`, 3600),
     apiFetchOptional<ResumoRow>(`/parlamentares/${dbId}/despesas/resumo?ano=${ANO}`, 3600),
+    apiFetch<{ data: { id: number }[] }>(`/parlamentares?casa=${casa}&limit=700&offset=0`, 3600),
   ]);
+
+  const todosIds = todosParl.data.map((p) => p.id);
+  const todosResumos = await apiFetch<{ parlamentar_id: number; total: number }[]>(
+    `/despesas/resumo-ano?ids=${todosIds.join(",")}&ano=${ANO}`,
+    3600,
+  );
+
+  const rankingOrdenado = [...todosResumos].sort((a, b) => b.total - a.total);
+  const posRanking = rankingOrdenado.findIndex((r) => r.parlamentar_id === dbId) + 1;
+  const totalNaCasa = todosIds.length;
 
   const presencaTotal   = presenca.total;
   const presencaPresente = presenca.presente;
@@ -115,8 +130,10 @@ export default async function DetalhePage({ params }: Props) {
     },
     {
       label: "Ranking de gastos",
-      valor: "—",
-      delta: "cálculo em breve",
+      valor: posRanking > 0 ? `${posRanking}º` : "—",
+      delta: posRanking > 0
+        ? `de ${totalNaCasa} ${casa === "camara" ? "deputados" : "senadores"} em ${ANO}`
+        : "sem dados de despesa",
       deltaPos: false,
     },
   ];

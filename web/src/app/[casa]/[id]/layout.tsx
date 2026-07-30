@@ -52,19 +52,47 @@ type LayoutProps = {
   children: React.ReactNode;
 };
 
+const ID_RE = /^\d{1,10}$/;
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ casa: string; id: string }>;
 }): Promise<Metadata> {
   const { casa, id } = await params;
-  const parl = await apiFetchOptional<{ nome: string }>(`/parlamentares/${casa}/${id}`, 86400);
-  return { title: parl?.nome ?? "Parlamentar" };
+  if (!(casa in CASAS) || !ID_RE.test(id)) return {};
+  const casaKey = casa as Casa;
+  const parl = await apiFetchOptional<{ nome: string; partido?: string; uf?: string; foto_url?: string }>(
+    `/parlamentares/${casa}/${id}`, 86400,
+  );
+  if (!parl) return {};
+
+  const cargo = CASAS[casaKey].cargo;
+  const titulo = parl.nome;
+  const descricao = [
+    cargo,
+    parl.partido,
+    parl.uf,
+    "— gastos, proposições e presença no Capivara Parlamentar.",
+  ].filter(Boolean).join(" · ");
+
+  return {
+    title: titulo,
+    description: descricao,
+    openGraph: {
+      title: titulo,
+      description: descricao,
+      url: `https://www.capivaraparlamentar.com.br/${casa}/${id}`,
+      ...(parl.foto_url ? { images: [{ url: parl.foto_url, width: 300, height: 300, alt: parl.nome }] } : {}),
+    },
+    twitter: { card: "summary", title: titulo, description: descricao },
+    alternates: { canonical: `https://www.capivaraparlamentar.com.br/${casa}/${id}` },
+  };
 }
 
 export default async function ParlamentarLayout({ params, children }: LayoutProps) {
   const { casa, id } = await params;
-  if (!(casa in CASAS)) notFound();
+  if (!(casa in CASAS) || !ID_RE.test(id)) notFound();
 
   const casaKey = casa as Casa;
   const { label, cargo } = CASAS[casaKey];
@@ -152,14 +180,6 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
             {redesEl}
           </div>
 
-          <div className="flex gap-2 sm:flex-col sm:gap-2.5 shrink-0">
-            <button className="flex-1 sm:flex-none bg-brand-blue text-white px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-[#0d3d96] transition-colors">
-              Criar alerta
-            </button>
-            <button className="flex-1 sm:flex-none border border-border-input text-[#33404f] px-5 py-[11px] rounded-lg font-bold text-sm hover:bg-surface-alt transition-colors">
-              Baixar dados
-            </button>
-          </div>
         </div>
 
         {orgaosOrdenados.length > 0 && (
