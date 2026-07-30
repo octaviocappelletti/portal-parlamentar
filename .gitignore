@@ -33,3 +33,21 @@ Thumbs.db
 
 # Logs
 *.log
+
+# TypeScript build cache
+web/tsconfig.tsbuildinfo
+
+# Claude Code
+.claude/
+.agents/
+skills-lock.json
+
+# Ferramentas de design
+.impeccable/
+design_handoff_capivara/
+
+# Editor
+.vscode/
+
+# API — credenciais reais (nunca versionar)
+api/.env

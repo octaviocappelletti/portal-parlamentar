@@ -2,7 +2,6 @@ import Link from "next/link";
 import SearchBar from "@/components/SearchBar";
 import GastosChart from "@/components/GastosChart";
 import { apiFetch } from "@/lib/api";
-import { MOCK_GASTOS_HOME } from "@/lib/mock";
 
 export const revalidate = 3600;
 
@@ -24,6 +23,13 @@ type StatsResponse = {
   total_gasto: number;
 };
 
+type CategoriasAnoResponse = {
+  ano: number;
+  data: { label: string; total: number }[];
+};
+
+const CORES_CATEGORIA = ["#1351B4", "#1351B4", "#168821", "#168821", "#FFCD07", "#FFCD07"];
+
 async function fetchStats() {
   const data = await apiFetch<StatsResponse>("/stats", 3600);
   return {
@@ -32,6 +38,15 @@ async function fetchStats() {
     totalProps:  data.total_proposicoes,
     totalGasto:  data.total_gasto,
   };
+}
+
+async function fetchCategoriasAno(): Promise<CategoriasAnoResponse> {
+  try {
+    return await apiFetch<CategoriasAnoResponse>("/despesas/categorias-ano", 86400);
+  } catch (err) {
+    console.error("[home] fetchCategoriasAno falhou:", err);
+    return { ano: new Date().getFullYear() - 1, data: [] };
+  }
 }
 
 const COMO_FUNCIONA = [
@@ -59,7 +74,13 @@ const COMO_FUNCIONA = [
 ] as const;
 
 export default async function Home() {
-  const { totalCamara, totalSenado, totalProps, totalGasto } = await fetchStats();
+  const [{ totalCamara, totalSenado, totalProps, totalGasto }, categorias] =
+    await Promise.all([fetchStats(), fetchCategoriasAno()]);
+
+  const gastosData = categorias.data.map((item, i) => ({
+    ...item,
+    cor: CORES_CATEGORIA[i] ?? "#1351B4",
+  }));
 
   const stats = [
     {
@@ -212,9 +233,15 @@ export default async function Home() {
 
           <div className="bg-white border border-border-base rounded-2xl p-6">
             <p className="text-[13px] text-text-body font-semibold mb-4">
-              Gastos por categoria (média mensal)
+              Gastos por categoria — média mensal {categorias.ano}
             </p>
-            <GastosChart data={MOCK_GASTOS_HOME as unknown as { label: string; total: number; cor: string }[]} />
+            {gastosData.length > 0 ? (
+              <GastosChart data={gastosData} />
+            ) : (
+              <p className="text-[13px] text-text-muted py-4">
+                Dados de gastos indisponíveis no momento.
+              </p>
+            )}
           </div>
         </div>
       </section>
