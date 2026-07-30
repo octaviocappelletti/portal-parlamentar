@@ -173,7 +173,7 @@ export default async function ParlamentarLayout({ params, children }: LayoutProp
                 const nome = o.nome_orgao ?? o.sigla_orgao ?? `Órgão ${o.id_orgao}`;
                 return (
                   <span
-                    key={o.id_orgao}
+                    key={o.id}
                     className="inline-flex items-center gap-1.5 text-[12px] font-semibold rounded-full px-3 py-1"
                     style={{ backgroundColor: bg, color: text }}
                     title={o.nome_orgao ?? undefined}

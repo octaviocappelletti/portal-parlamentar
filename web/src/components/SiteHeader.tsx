@@ -2,6 +2,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import CapivaraLogo from "@/components/CapivaraLogo";
 
 const NAV = [
   { label: "Deputados",   href: "/camara" },
@@ -19,9 +20,7 @@ export default function SiteHeader() {
     <header className="bg-white border-b-[3px] border-brand-yellow">
       <div className="max-w-[1180px] mx-auto flex items-center gap-3 px-4 sm:px-8 py-[14px] sm:py-[18px]">
         <Link href="/" className="flex items-center gap-3 sm:gap-4 shrink-0" onClick={() => setOpen(false)}>
-          <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-brand-blue flex items-center justify-center text-white font-black text-[17px] sm:text-[19px] select-none">
-            CP
-          </div>
+          <CapivaraLogo size={44} variant="light" className="w-10 h-10 sm:w-11 sm:h-11" />
           <div>
             <div className="font-extrabold text-[16px] sm:text-[19px] tracking-tight text-text-strong leading-tight">
               Capivara Parlamentar
