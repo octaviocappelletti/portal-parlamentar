@@ -57,7 +57,8 @@ export type ParlamentarCardProps = {
   nome: string;
   partido: string | null | undefined;
   uf: string | null | undefined;
-  gasto2025: number | null;
+  gastoAno: number | null;
+  ano: number;
   mediaGasto: number;
   presencaPct: number | null;
   situacao: string | null | undefined;
@@ -70,7 +71,8 @@ export default function ParlamentarCard({
   nome,
   partido,
   uf,
-  gasto2025,
+  gastoAno,
+  ano,
   mediaGasto,
   presencaPct,
   situacao,
@@ -79,8 +81,8 @@ export default function ParlamentarCard({
   fotoUrl,
 }: ParlamentarCardProps) {
   const cfg = resolveCfg(situacao);
-  const gastoStr = fmtGasto(gasto2025);
-  const acimaDaMedia = !!gasto2025 && mediaGasto > 0 && gasto2025 > mediaGasto;
+  const gastoStr = fmtGasto(gastoAno);
+  const acimaDaMedia = !!gastoAno && mediaGasto > 0 && gastoAno > mediaGasto;
 
   return (
     <Link
@@ -115,7 +117,7 @@ export default function ParlamentarCard({
         {/* Mini-stats */}
         <div className="flex gap-2 mb-4">
           <div className="flex-1 bg-surface-alt rounded-lg p-[10px]">
-            <p className="text-[11px] text-text-muted font-semibold mb-1">Gasto 2025</p>
+            <p className="text-[11px] text-text-muted font-semibold mb-1">Gasto {ano}</p>
             <p
               className="text-[14px] font-extrabold"
               style={{ color: acimaDaMedia ? "#c0392b" : "#071d41" }}

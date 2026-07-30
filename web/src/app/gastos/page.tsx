@@ -55,14 +55,16 @@ type SP = {
   pagina?: string;
 };
 
+const ANO_ATUAL = String(new Date().getFullYear());
+
 function buildUrl(sp: SP, overrides: Partial<SP>): string {
   const merged = { ...sp, ...overrides };
   const p = new URLSearchParams();
   if (merged.casa && merged.casa !== "camara") p.set("casa",    merged.casa);
-  if (merged.q)                               p.set("q",       merged.q);
-  if (merged.uf)                              p.set("uf",      merged.uf);
-  if (merged.partido)                         p.set("partido", merged.partido);
-  if (merged.ano && merged.ano !== "2025")    p.set("ano",     merged.ano);
+  if (merged.q)                                p.set("q",       merged.q);
+  if (merged.uf)                               p.set("uf",      merged.uf);
+  if (merged.partido)                          p.set("partido", merged.partido);
+  if (merged.ano && merged.ano !== ANO_ATUAL)  p.set("ano",     merged.ano);
   if (Number(merged.pagina) > 1)              p.set("pagina",  String(merged.pagina));
   const qs = p.toString();
   return `/gastos${qs ? `?${qs}` : ""}`;
@@ -78,7 +80,7 @@ type Props = { searchParams: Promise<SP> };
 export default async function GastosPage({ searchParams }: Props) {
   const {
     casa = "camara", q = "", uf = "", partido = "",
-    ano = "2025", pagina = "1",
+    ano = ANO_ATUAL, pagina = "1",
   } = await searchParams;
 
   if (!(casa in CASAS)) notFound();
@@ -196,9 +198,12 @@ export default async function GastosPage({ searchParams }: Props) {
             defaultValue={ano}
             className="border-[1.5px] border-border-input rounded-lg px-4 py-3 text-sm font-semibold text-text-strong focus:outline-none bg-white"
           >
-            {["2025", "2024", "2023"].map((a) => (
-              <option key={a} value={a}>Ano: {a}</option>
-            ))}
+            {Array.from(
+                { length: new Date().getFullYear() - 2020 },
+                (_, i) => String(new Date().getFullYear() - i)
+              ).map((a) => (
+                <option key={a} value={a}>Ano: {a}</option>
+              ))}
           </select>
 
           <button

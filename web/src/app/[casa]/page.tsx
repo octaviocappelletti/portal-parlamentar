@@ -36,13 +36,15 @@ type SP = {
   sort?: string;
 };
 
+const ANO_ATUAL = String(new Date().getFullYear());
+
 function buildUrl(casa: string, sp: SP, overrides: Partial<SP>): string {
   const merged = { ...sp, ...overrides };
   const p = new URLSearchParams();
-  if (merged.q)                              p.set("q",       merged.q);
-  if (merged.uf)                             p.set("uf",      merged.uf);
-  if (merged.partido)                        p.set("partido", merged.partido);
-  if (merged.ano && merged.ano !== "2025")   p.set("ano",     merged.ano);
+  if (merged.q)                                  p.set("q",       merged.q);
+  if (merged.uf)                                 p.set("uf",      merged.uf);
+  if (merged.partido)                            p.set("partido", merged.partido);
+  if (merged.ano && merged.ano !== ANO_ATUAL)    p.set("ano",     merged.ano);
   if (merged.sort && merged.sort !== "nome") p.set("sort",    merged.sort);
   const m = parseInt(merged.mostrar ?? String(STEP), 10);
   if (m > STEP)                              p.set("mostrar", String(m));
@@ -70,7 +72,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
   const { nome, cargo, situacao } = CASAS[casaKey];
   const {
     q = "", uf = "", partido = "",
-    ano = "2025", mostrar = String(STEP), sort = "nome",
+    ano = ANO_ATUAL, mostrar = String(STEP), sort = "nome",
   } = await searchParams;
 
   const limit = Math.min(Math.max(parseInt(mostrar, 10) || STEP, STEP), 200);
@@ -278,7 +280,8 @@ export default async function ListaPage({ params, searchParams }: Props) {
                 nome={p.nome}
                 partido={p.partido}
                 uf={p.uf}
-                gasto2025={totaisMap.get(p.id) ?? null}
+                gastoAno={totaisMap.get(p.id) ?? null}
+                ano={parseInt(ano, 10)}
                 mediaGasto={mediaGasto}
                 presencaPct={presencaMap.get(p.id_externo) ?? null}
                 situacao={p.situacao}

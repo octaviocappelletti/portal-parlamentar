@@ -54,7 +54,7 @@ export default async function DetalhePage({ params }: Props) {
   const parlamentar = await apiFetchOptional<Parlamentar>(`/parlamentares/${casa}/${id}`, 3600);
   if (!parlamentar) notFound();
 
-  const ANO = 2025;
+  const ANO = new Date().getFullYear();
   const dbId = parlamentar.id;
 
   const [presenca, propsRes, despesasCat, resumo] = await Promise.all([
@@ -93,7 +93,7 @@ export default async function DetalhePage({ params }: Props) {
 
   const kpis = [
     {
-      label: "Gasto em 2025",
+      label: `Gasto em ${ANO}`,
       valor: totalGasto > 0 ? formatGastoKPI(totalGasto) : "—",
       delta: totalGasto > 0 ? "cota parlamentar" : "sem dados de despesa",
       deltaPos: false,

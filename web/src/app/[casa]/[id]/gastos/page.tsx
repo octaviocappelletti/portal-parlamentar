@@ -27,12 +27,14 @@ function isCnpj(s: string | null | undefined): boolean {
   return (s ?? "").replace(/\D/g, "").length === 14;
 }
 
+const ANO_ATUAL = String(new Date().getFullYear());
+
 type SP = { ano?: string; mes?: string; natureza?: string; pagina?: string };
 
 function buildUrl(base: string, sp: SP, overrides: Partial<SP>): string {
   const merged = { ...sp, ...overrides };
   const p = new URLSearchParams();
-  if (merged.ano && merged.ano !== "2025") p.set("ano", merged.ano);
+  if (merged.ano && merged.ano !== ANO_ATUAL) p.set("ano", merged.ano);
   if (merged.mes)                          p.set("mes", merged.mes);
   if (merged.natureza)                     p.set("natureza", merged.natureza);
   if (Number(merged.pagina) > 1)           p.set("pagina", String(merged.pagina));
@@ -49,7 +51,7 @@ type Props = {
 
 export default async function GastosParPage({ params, searchParams }: Props) {
   const { casa, id } = await params;
-  const { ano = "2025", mes = "", natureza = "", pagina = "1" } = await searchParams;
+  const { ano = ANO_ATUAL, mes = "", natureza = "", pagina = "1" } = await searchParams;
 
   const parlamentar = await apiFetchOptional<Pick<Parlamentar, "id" | "nome">>(
     `/parlamentares/${casa}/${id}`,
@@ -167,7 +169,10 @@ export default async function GastosParPage({ params, searchParams }: Props) {
                 defaultValue={ano}
                 className="border-[1.5px] border-border-input rounded-lg px-4 py-[11px] text-sm font-semibold text-text-strong focus:outline-none bg-white"
               >
-                {["2025", "2024", "2023"].map((a) => (
+                {Array.from(
+                  { length: new Date().getFullYear() - 2020 },
+                  (_, i) => String(new Date().getFullYear() - i)
+                ).map((a) => (
                   <option key={a} value={a}>Ano: {a}</option>
                 ))}
               </select>
