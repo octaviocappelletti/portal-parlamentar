@@ -19,8 +19,21 @@ interface Props {
   params: Promise<{ casa: string; id: string; despesaId: string }>;
 }
 
+const ID_RE = /^\d{1,10}$/;
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export default async function DespesaPage({ params }: Props) {
   const { casa, id, despesaId } = await params;
+
+  if (!ID_RE.test(id) || !ID_RE.test(despesaId)) notFound();
 
   const [parlamentar, despesa] = await Promise.all([
     apiFetchOptional<{ id: number; nome: string }>(`/parlamentares/${casa}/${id}`, 604800),
@@ -71,7 +84,7 @@ export default async function DespesaPage({ params }: Props) {
           </dl>
         </div>
 
-        {despesa.url_documento ? (
+        {despesa.url_documento && isSafeUrl(despesa.url_documento) ? (
           <a
             href={despesa.url_documento}
             target="_blank"

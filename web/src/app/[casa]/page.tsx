@@ -297,6 +297,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
           {temMais && (
             <Link
               href={carregarMaisUrl}
+              scroll={false}
               className="border-[1.5px] border-brand-blue text-brand-blue font-bold text-sm px-6 py-3 rounded-lg hover:bg-blue-bg transition-colors"
             >
               Carregar mais {STEP} parlamentares

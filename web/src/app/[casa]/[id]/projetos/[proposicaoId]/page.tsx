@@ -25,8 +25,21 @@ function resolveStatus(p: Proposicao): string {
   return "Em tramitação";
 }
 
+const ID_RE = /^\d{1,10}$/;
+
+function isSafeUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 export default async function ProposicaoPage({ params }: Props) {
   const { casa, proposicaoId } = await params;
+
+  if (!ID_RE.test(proposicaoId)) notFound();
 
   const proposicao = await apiFetchOptional<Proposicao>(`/proposicoes/${proposicaoId}`, 86400);
   if (!proposicao) notFound();
@@ -70,7 +83,7 @@ export default async function ProposicaoPage({ params }: Props) {
             </p>
           )}
 
-          {proposicao.url_inteiro_teor ? (
+          {proposicao.url_inteiro_teor && isSafeUrl(proposicao.url_inteiro_teor) ? (
             <a
               href={proposicao.url_inteiro_teor}
               target="_blank"
