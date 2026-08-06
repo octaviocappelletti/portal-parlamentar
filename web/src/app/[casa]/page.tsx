@@ -79,10 +79,12 @@ export default async function ListaPage({ params, searchParams }: Props) {
 
   // Step 1: parlamentares + partidos em paralelo
   const parlQs = new URLSearchParams({ casa, limit: String(limit), offset: "0" });
-  if (situacao) parlQs.set("situacao", situacao);
-  if (q)        parlQs.set("q",        q);
-  if (uf)       parlQs.set("uf",       uf);
-  if (partido)  parlQs.set("partido",  partido);
+  if (situacao)        parlQs.set("situacao", situacao);
+  if (q)               parlQs.set("q",        q);
+  if (uf)              parlQs.set("uf",       uf);
+  if (partido)         parlQs.set("partido",  partido);
+  if (sort !== "nome") parlQs.set("sort",     sort);
+  if (sort !== "nome") parlQs.set("ano",      ano);
 
   const [parlRes, partidos] = await Promise.all([
     apiFetch<{ data: Parlamentar[]; count: number }>(`/parlamentares?${parlQs}`, 86400),
@@ -118,13 +120,7 @@ export default async function ListaPage({ params, searchParams }: Props) {
     presencaData.map((r) => [r.id_externo, r.pct_presenca]),
   );
 
-  // Ordenação client-side por gasto
-  let sorted = [...parlamentares];
-  if (sort === "gasto_desc") {
-    sorted.sort((a, b) => (totaisMap.get(b.id) ?? 0) - (totaisMap.get(a.id) ?? 0));
-  } else if (sort === "gasto_asc") {
-    sorted.sort((a, b) => (totaisMap.get(a.id) ?? 0) - (totaisMap.get(b.id) ?? 0));
-  }
+  const sorted = parlamentares;
 
   const gastos = sorted.map((p) => totaisMap.get(p.id) ?? 0).filter((v) => v > 0);
   const mediaGasto = gastos.length

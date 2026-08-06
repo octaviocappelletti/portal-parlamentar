@@ -16,7 +16,8 @@ function twelveMonthsAgo() {
 // Lista paginada com filtros. Retorna { data, count }.
 router.get('/', async (req, res, next) => {
   try {
-    const { casa, q, uf, partido, situacao } = req.query;
+    const { casa, q, uf, partido, situacao, sort } = req.query;
+    const ano    = parseInt(req.query.ano, 10) || new Date().getFullYear();
     const limit  = Math.min(Math.max(parseInt(req.query.limit,  10) || 24, 1), 200);
     const offset = Math.max(parseInt(req.query.offset, 10) || 0, 0);
 
@@ -24,22 +25,52 @@ router.get('/', async (req, res, next) => {
       return res.status(400).json({ error: 'parâmetro casa inválido (camara|senado)' });
     }
 
-    const conditions = ['casa = $1'];
-    const params     = [casa];
+    const byGasto = sort === 'gasto_desc' || sort === 'gasto_asc';
+
+    const conditions   = ['p.casa = $1'];
+    const filterParams = [casa];
     let idx = 2;
 
-    if (situacao) { conditions.push(`situacao = $${idx++}`); params.push(situacao); }
-    if (q)        { conditions.push(`nome ILIKE $${idx++}`); params.push(`%${q}%`); }
-    if (uf)       { conditions.push(`uf = $${idx++}`);       params.push(uf); }
-    if (partido)  { conditions.push(`partido = $${idx++}`);  params.push(partido); }
+    if (situacao) { conditions.push(`p.situacao = $${idx++}`); filterParams.push(situacao); }
+    if (q)        { conditions.push(`p.nome ILIKE $${idx++}`); filterParams.push(`%${q}%`); }
+    if (uf)       { conditions.push(`p.uf = $${idx++}`);       filterParams.push(uf); }
+    if (partido)  { conditions.push(`p.partido = $${idx++}`);  filterParams.push(partido); }
 
     const where = 'WHERE ' + conditions.join(' AND ');
 
+    if (byGasto) {
+      const order    = sort === 'gasto_desc' ? 'DESC' : 'ASC';
+      const anoIdx   = idx;
+      const limitIdx = idx + 1;
+      const offIdx   = idx + 2;
+
+      const [countRes, dataRes] = await Promise.all([
+        pool.query(
+          `SELECT COUNT(*)::int AS count FROM parlamentar p ${where}`,
+          filterParams
+        ),
+        pool.query(
+          `SELECT p.*, COALESCE(d.total::float8, 0) AS _total_gasto
+           FROM parlamentar p
+           LEFT JOIN despesa_resumo_ano d ON d.parlamentar_id = p.id AND d.ano = $${anoIdx}
+           ${where}
+           ORDER BY _total_gasto ${order} NULLS LAST, p.nome
+           LIMIT $${limitIdx} OFFSET $${offIdx}`,
+          [...filterParams, ano, limit, offset]
+        ),
+      ]);
+
+      return res.json({ data: dataRes.rows, count: countRes.rows[0].count });
+    }
+
     const [countRes, dataRes] = await Promise.all([
-      pool.query(`SELECT COUNT(*)::int AS count FROM parlamentar ${where}`, params),
       pool.query(
-        `SELECT * FROM parlamentar ${where} ORDER BY nome LIMIT $${idx} OFFSET $${idx + 1}`,
-        [...params, limit, offset]
+        `SELECT COUNT(*)::int AS count FROM parlamentar p ${where}`,
+        filterParams
+      ),
+      pool.query(
+        `SELECT p.* FROM parlamentar p ${where} ORDER BY p.nome LIMIT $${idx} OFFSET $${idx + 1}`,
+        [...filterParams, limit, offset]
       ),
     ]);
 
