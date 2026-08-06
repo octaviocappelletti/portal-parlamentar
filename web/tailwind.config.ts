@@ -51,8 +51,6 @@ const config: Config = {
     { pattern: /^hover:bg-marinho-/, variants: ["hover"] },
     { pattern: /^hover:border-marinho-/, variants: ["hover"] },
     { pattern: /^hover:text-marinho-/, variants: ["hover"] },
-    { pattern: /^focus-visible:ring-marinho-/, variants: ["focus-visible"] },
-    { pattern: /^group-hover:ring-marinho-/, variants: ["group-hover"] },
   ],
   plugins: [],
 };

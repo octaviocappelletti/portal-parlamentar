@@ -2,6 +2,15 @@ import React from "react";
 
 type Plataforma = "twitter" | "facebook" | "youtube" | "instagram" | "link";
 
+function isSafeUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === "https:" || protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
 function detectar(url: string): Plataforma {
   const u = url.toLowerCase();
   if (u.includes("twitter.com") || u.includes("x.com")) return "twitter";
@@ -84,9 +93,9 @@ type Props = {
 
 export default function RedesSociais({ links, website }: Props) {
   const todos: Array<{ url: string; plataforma: Plataforma }> = [
-    ...links.map((url) => ({ url, plataforma: detectar(url) })),
+    ...links.filter(isSafeUrl).map((url) => ({ url, plataforma: detectar(url) })),
     // website usa a mesma detecção de plataforma — para senadores, pode ser Facebook, etc.
-    ...(website ? [{ url: website, plataforma: detectar(website) }] : []),
+    ...(website && isSafeUrl(website) ? [{ url: website, plataforma: detectar(website) }] : []),
   ];
 
   if (todos.length === 0) return null;

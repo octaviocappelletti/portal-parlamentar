@@ -16,17 +16,7 @@ export default function TabsNav({ basePath }: { basePath: string }) {
   return (
     <div className="flex border-b border-border-base overflow-x-auto">
       {TABS.map(({ label, suffix, enabled }) => {
-        if (!enabled) {
-          return (
-            <span
-              key={label}
-              className="shrink-0 px-5 py-[14px] text-sm text-text-muted font-semibold select-none cursor-default opacity-50"
-              title="Em breve"
-            >
-              {label}
-            </span>
-          );
-        }
+        if (!enabled) return null;
         const href = `${basePath}${suffix}`;
         const isActive = suffix === "" ? pathname === basePath : pathname === href;
         return (
